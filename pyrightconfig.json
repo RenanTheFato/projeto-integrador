@@ -1,0 +1,8 @@
+{
+  "extraPaths": [
+    "machine/src/cpp/build",
+    "machine/src/cpp/stubs"
+  ],
+  "venvPath": "/home/thefato/.cache/pypoetry/virtualenvs",
+  "venv": "machine-RdJ6VvYi-py3.12"
+}

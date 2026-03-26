@@ -1,0 +1,95 @@
+import sys
+import os
+
+sys.path.append(os.path.dirname(__file__))
+
+import torch
+from src.neural.path_network import PathNetwork
+from src.pathfinding.pathfinder import get_city_graph, apply_neural_weights, find_best_path
+
+CITY = "Taubaté, São Paulo, Brasil"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "path_network.pth")
+SEPARATOR = "-" * 50
+
+
+def load_model() -> tuple:
+    """
+    Carrega o modelo treinado e os parâmetros de normalização do arquivo .pth.
+    Se o arquivo não existir, instrui o usuário a treinar primeiro.
+    """
+    if not os.path.exists(MODEL_PATH):
+        print(f"\nERRO: Modelo nao encontrado em '{MODEL_PATH}'.")
+        print("Execute o treinamento antes de rodar o sistema:")
+        print("  python src/pathfinding/train.py")
+        sys.exit(1)
+
+    checkpoint = torch.load(MODEL_PATH, weights_only=True)
+    model = PathNetwork(input_size=3, hidden_size=64)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.eval()
+
+    X_mean = checkpoint["X_mean"]
+    X_std = checkpoint["X_std"]
+    y_mean = checkpoint["y_mean"]
+    y_std = checkpoint["y_std"]
+
+    return model, X_mean, X_std, y_mean, y_std
+
+
+def prompt_coordinates(label: str) -> tuple[float, float]:
+    """Solicita coordenadas ao usuario de forma interativa."""
+    print(f"\n{label}")
+    while True:
+        try:
+            lat = float(input("  Latitude  (ex: -23.026): ").strip())
+            lon = float(input("  Longitude (ex: -45.555): ").strip())
+
+            if not (-90 <= lat <= 90):
+                print("  Latitude invalida. Deve estar entre -90 e 90.")
+                continue
+            if not (-180 <= lon <= 180):
+                print("  Longitude invalida. Deve estar entre -180 e 180.")
+                continue
+
+            return (lat, lon)
+        except ValueError:
+            print("  Valor invalido. Digite apenas numeros (ex: -23.026).")
+
+
+def print_result(result: dict) -> None:
+    """Exibe o resultado da rota no terminal."""
+    print(f"\n{SEPARATOR}")
+    print("MELHOR ROTA CALCULADA")
+    print(SEPARATOR)
+    print(f"  Distancia total : {result['distance_km']:.2f} km  ({result['distance_m']:.0f} m)")
+    print(f"  Tempo estimado  : {result['time_min']:.1f} minutos")
+    print(f"  Nos no caminho  : {len(result['path'])} pontos")
+    print(SEPARATOR)
+
+
+def main():
+    print(SEPARATOR)
+    print("Sistema de Rota para Bombeiros")
+    print(SEPARATOR)
+
+    origin = prompt_coordinates("Coordenadas do Ponto de Bombeiros (origem)")
+    destination = prompt_coordinates("Coordenadas da Ocorrencia (destino)")
+
+    print(f"\n{SEPARATOR}")
+    print("Processando...")
+
+    graph = get_city_graph(CITY)
+
+    print("  Carregando modelo treinado...")
+    model, X_mean, X_std, y_mean, y_std = load_model()
+
+    apply_neural_weights(graph, model, X_mean, X_std, y_mean, y_std)
+
+    print("  Calculando melhor rota...")
+    result = find_best_path(graph, origin, destination)
+
+    print_result(result)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Poetry
+
+# NÃO ignorar o poetry.lock — deve ser commitado para garantir
+# que todos do time usem as mesmas versões de dependências
+
+# Modelo treinado
+
+# O modelo é gerado localmente pelo train.py e não deve ser versionado
+# (arquivo grande, específico para cada máquina/dataset)
+models/
+
+# C++ build
+machine/src/cpp/build/
+
+# VS Code
+.vscode/
+
+# Dados e arquivos temporários
+*.env
+.env
+*.log
+*.tmp
+*.cache
+
+# Mapas gerados pelo folium
+*.html
+
+# Cache do osmnx
+cache/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
