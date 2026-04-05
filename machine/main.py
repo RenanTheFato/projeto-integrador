@@ -17,28 +17,30 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "path_network.pth
 MAP_OUTPUT = os.path.join(os.path.dirname(__file__), "rota.html")
 SEPARATOR = "-" * 50
 
-
 def load_model() -> tuple:
     if not os.path.exists(MODEL_PATH):
         print(f"\nERRO: Modelo nao encontrado em '{MODEL_PATH}'.")
-        print("Execute o treinamento antes de rodar o sistema:")
-        print("  python src/pathfinding/train.py")
+        print("Execute: python src/pathfinding/train.py")
         sys.exit(1)
 
     checkpoint = torch.load(MODEL_PATH, weights_only=True)
-    input_size = checkpoint.get("input_size", PathNetwork.INPUT_SIZE)
-    model = PathNetwork(input_size=input_size, hidden_size=128)
+    model = PathNetwork(
+        edge_feat_size = checkpoint["edge_feat_size"],
+        node_feat_size = checkpoint["node_feat_size"],
+        gat_hidden     = checkpoint["gat_hidden"],
+        gat_heads      = checkpoint["gat_heads"],
+        gat_out_dim    = checkpoint["gat_out_dim"],
+        mlp_hidden     = checkpoint["mlp_hidden"],
+    )
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
     return (
         model,
-        checkpoint["X_mean"],
-        checkpoint["X_std"],
-        checkpoint["y_mean"],
-        checkpoint["y_std"],
+        checkpoint["nf_mean"], checkpoint["nf_std"],
+        checkpoint["ef_mean"], checkpoint["ef_std"],
+        checkpoint["y_mean"],  checkpoint["y_std"],
     )
-
 
 def prompt_coordinates(label: str) -> tuple[float, float]:
     print(f"\n{label}")
@@ -56,7 +58,6 @@ def prompt_coordinates(label: str) -> tuple[float, float]:
         except ValueError:
             print("  Valor invalido. Digite apenas numeros.")
 
-
 def print_result(result: dict) -> None:
     print(f"\n{SEPARATOR}")
     print("MELHOR ROTA CALCULADA")
@@ -65,7 +66,6 @@ def print_result(result: dict) -> None:
     print(f"  Tempo estimado  : {result['time_min']:.1f} minutos")
     print(f"  Nos no caminho  : {len(result['path'])} pontos")
     print(SEPARATOR)
-
 
 def cache_neural_costs(graph, mem: NodeMemoryManager) -> dict:
     """
@@ -81,7 +81,6 @@ def cache_neural_costs(graph, mem: NodeMemoryManager) -> dict:
         index[(u, v, key)] = buf_idx
     return index
 
-
 def main():
     print(SEPARATOR)
     print("Sistema de Rota para Bombeiros")
@@ -96,9 +95,9 @@ def main():
     graph = get_city_graph(CITY)
 
     print("  Carregando modelo treinado...")
-    model, X_mean, X_std, y_mean, y_std = load_model()
 
-    apply_neural_weights(graph, model, X_mean, X_std, y_mean, y_std)
+    model, nf_mean, nf_std, ef_mean, ef_std, y_mean, y_std = load_model()
+    apply_neural_weights(graph, model, nf_mean, nf_std, ef_mean, ef_std, y_mean, y_std)
 
     # Cacheia os custos neurais no gerenciador C++
     # buffer_size=1 porque cada aresta armazena apenas um float (o custo)
@@ -118,7 +117,6 @@ def main():
     # Libera os buffers C++ explicitamente
     for buf_idx in edge_cache.values():
         mem.free_buffer(buf_idx)
-
 
 if __name__ == "__main__":
     main()
