@@ -6,17 +6,19 @@ sys.path.append(os.path.dirname(__file__))
 import torch
 from src.neural.path_network import PathNetwork
 from src.pathfinding.pathfinder import get_city_graph, apply_neural_weights, find_best_path
+from src.pathfinding.map_visualizer import generate_map
+
+# Importa o módulo C++ compilado
+sys.path.append(os.path.join(os.path.dirname(__file__), "src", "cpp", "build"))
+from memory_manager import NodeMemoryManager
 
 CITY = "Taubaté, São Paulo, Brasil"
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "path_network.pth")
+MAP_OUTPUT = os.path.join(os.path.dirname(__file__), "rota.html")
 SEPARATOR = "-" * 50
 
 
 def load_model() -> tuple:
-    """
-    Carrega o modelo treinado e os parâmetros de normalização do arquivo .pth.
-    Se o arquivo não existir, instrui o usuário a treinar primeiro.
-    """
     if not os.path.exists(MODEL_PATH):
         print(f"\nERRO: Modelo nao encontrado em '{MODEL_PATH}'.")
         print("Execute o treinamento antes de rodar o sistema:")
@@ -24,40 +26,38 @@ def load_model() -> tuple:
         sys.exit(1)
 
     checkpoint = torch.load(MODEL_PATH, weights_only=True)
-    model = PathNetwork(input_size=3, hidden_size=64)
+    input_size = checkpoint.get("input_size", PathNetwork.INPUT_SIZE)
+    model = PathNetwork(input_size=input_size, hidden_size=128)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
-    X_mean = checkpoint["X_mean"]
-    X_std = checkpoint["X_std"]
-    y_mean = checkpoint["y_mean"]
-    y_std = checkpoint["y_std"]
-
-    return model, X_mean, X_std, y_mean, y_std
+    return (
+        model,
+        checkpoint["X_mean"],
+        checkpoint["X_std"],
+        checkpoint["y_mean"],
+        checkpoint["y_std"],
+    )
 
 
 def prompt_coordinates(label: str) -> tuple[float, float]:
-    """Solicita coordenadas ao usuario de forma interativa."""
     print(f"\n{label}")
     while True:
         try:
             lat = float(input("  Latitude  (ex: -23.026): ").strip())
             lon = float(input("  Longitude (ex: -45.555): ").strip())
-
             if not (-90 <= lat <= 90):
-                print("  Latitude invalida. Deve estar entre -90 e 90.")
+                print("  Latitude invalida.")
                 continue
             if not (-180 <= lon <= 180):
-                print("  Longitude invalida. Deve estar entre -180 e 180.")
+                print("  Longitude invalida.")
                 continue
-
             return (lat, lon)
         except ValueError:
-            print("  Valor invalido. Digite apenas numeros (ex: -23.026).")
+            print("  Valor invalido. Digite apenas numeros.")
 
 
 def print_result(result: dict) -> None:
-    """Exibe o resultado da rota no terminal."""
     print(f"\n{SEPARATOR}")
     print("MELHOR ROTA CALCULADA")
     print(SEPARATOR)
@@ -65,6 +65,21 @@ def print_result(result: dict) -> None:
     print(f"  Tempo estimado  : {result['time_min']:.1f} minutos")
     print(f"  Nos no caminho  : {len(result['path'])} pontos")
     print(SEPARATOR)
+
+
+def cache_neural_costs(graph, mem: NodeMemoryManager) -> dict:
+    """
+    Usa o NodeMemoryManager (C++) para armazenar o neural_cost
+    de cada aresta em buffers alocados fora do heap do Python.
+    Retorna um índice {(u, v, key): buffer_idx} para consulta posterior.
+    """
+    index = {}
+    for u, v, key, data in graph.edges(keys=True, data=True):
+        cost = data.get("neural_cost", 0.1)
+        buf_idx = mem.allocate_buffer()
+        mem.set_value(buf_idx, 0, cost)
+        index[(u, v, key)] = buf_idx
+    return index
 
 
 def main():
@@ -85,10 +100,25 @@ def main():
 
     apply_neural_weights(graph, model, X_mean, X_std, y_mean, y_std)
 
+    # Cacheia os custos neurais no gerenciador C++
+    # buffer_size=1 porque cada aresta armazena apenas um float (o custo)
+    print("  Cacheando custos neurais no gerenciador C++...")
+    mem = NodeMemoryManager(1)
+    edge_cache = cache_neural_costs(graph, mem)
+    print(f"  {mem.total_allocated()} bytes alocados pelo modulo C++")
+
     print("  Calculando melhor rota...")
     result = find_best_path(graph, origin, destination)
 
     print_result(result)
+
+    print("  Gerando mapa...")
+    generate_map(graph, result["path"], origin, destination, output_path=MAP_OUTPUT)
+
+    # Libera os buffers C++ explicitamente
+    for buf_idx in edge_cache.values():
+        mem.free_buffer(buf_idx)
+
 
 if __name__ == "__main__":
     main()
