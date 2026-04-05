@@ -8,14 +8,12 @@ import folium
 import osmnx as ox
 import networkx as nx
 
-
 def _get_path_coords(graph, path: list) -> list[tuple]:
     coords = []
     for node in path:
         data = graph.nodes[node]
         coords.append((data["y"], data["x"]))
     return coords
-
 
 def _calc_path_stats(graph, path: list) -> dict:
     total_distance_m = 0.0
@@ -31,7 +29,6 @@ def _calc_path_stats(graph, path: list) -> dict:
         "time_s": total_time_s,
         "time_min": total_time_s / 60,
     }
-
 
 def _find_distance_path(graph, origin_node, dest_node) -> list:
     return nx.shortest_path(graph, origin_node, dest_node, weight="length")
@@ -80,7 +77,6 @@ def _inject_info_box(output_path: str, fast_stats: dict, dist_stats: dict) -> No
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
-
 
 def generate_map(
     graph,
