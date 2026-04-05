@@ -1,4 +1,3 @@
-# machine/src/pathfinding/map_handler.py
 import osmnx as ox
 import networkx as nx
 import folium
