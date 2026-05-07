@@ -1,0 +1,44 @@
+{
+  "name": "zeno-backend",
+  "version": "1.0.0",
+  "description": "Zeno Backend service",
+  "main": "dist/server.js",
+  "type": "module",
+  "private": true,
+  "author": "Renan Santana",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RenanTheFato/projeto-integrador.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev": "tsx --watch ./src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc"
+  },
+  "keywords": [
+    "nodejs",
+    "typescript",
+    "api",
+    "machine learn",
+    "routing",
+    "AI",
+    "Artificial Intelligence"
+  ],
+  "devDependencies": {
+    "@types/node": "^25.6.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^11.2.0",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.8.5",
+    "fastify-type-provider-zod": "^6.1.0",
+    "zod": "^4.4.3"
+  }
+}
