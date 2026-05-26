@@ -5,6 +5,7 @@ import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { env } from "./config/env.js";
 import dotenv from 'dotenv';
 import fastifyRateLimit from "@fastify/rate-limit";
+import { routes } from "./routes/index.js";
 
 dotenv.config()
 
@@ -35,6 +36,8 @@ async function start(): Promise<void> {
       httpOnly: true
     }
   })
+
+  await server.register(routes, { prefix: "/api/v1"})
 
   server.listen({
     host: HTTP_HOST,
