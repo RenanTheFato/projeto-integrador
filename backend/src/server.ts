@@ -37,7 +37,7 @@ async function start(): Promise<void> {
     }
   })
 
-  await server.register(routes, { prefix: "/api/v1"})
+  await server.register(routes, { prefix: "/api/v1" })
 
   server.listen({
     host: HTTP_HOST,
