@@ -10,3 +10,17 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+model Base {
+  id        String  @id @default(uuid())
+  name      String
+  address   String
+  latitude  Decimal @db.Decimal(15, 12)
+  longitude Decimal @db.Decimal(15, 12)
+  phone     String
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("base")
+}
