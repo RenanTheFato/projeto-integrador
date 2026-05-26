@@ -4,6 +4,8 @@ import { fastifyCookie } from "@fastify/cookie";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { env } from "./config/env.js";
 import dotenv from 'dotenv';
+import fastifyRateLimit from "@fastify/rate-limit";
+import { routes } from "./routes/index.js";
 
 dotenv.config()
 
@@ -13,8 +15,29 @@ const HTTP_HOST = env.HOST
 const server = fastify({ logger: true }).withTypeProvider<ZodTypeProvider>()
 
 async function start(): Promise<void> {
-  await server.register(fastifyCors)
-  await server.register(fastifyCookie)
+
+  await server.register(fastifyRateLimit, {
+    global: true,
+    max: 200,
+    timeWindow: "1 minute",
+    errorResponseBuilder: () => ({
+      error: "Too many requests. Please slow down",
+      statusCode: 429,
+    }),
+    allowList: ["127.0.0.1", "::1"],
+  })
+
+  await server.register(fastifyCors, {
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  })
+  await server.register(fastifyCookie, {
+    parseOptions: {
+      httpOnly: true
+    }
+  })
+
+  await server.register(routes, { prefix: "/api/v1" })
 
   server.listen({
     host: HTTP_HOST,
