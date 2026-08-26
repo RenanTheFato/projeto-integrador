@@ -1,6 +1,11 @@
 # Projeto Integrador
 Sistema de identificação de rotas otimizadas para bombeiros usando redes neurais.
 
+> **Este arquivo é o manual de instalação e execução.** Para o retrato do
+> sistema — o que existe hoje, para que cada tela serve e por que foi feito
+> assim — leia [`docs/documentacao.md`](docs/documentacao.md). Para apresentar o
+> projeto, [`docs/guia-de-slides.md`](docs/guia-de-slides.md).
+
 ---
 
 ## O que o sistema faz
@@ -384,6 +389,43 @@ serviço de IA fora do ar — mas aí `/ai/routes` responde 503, e um despacho �
 criado sem rota (com o aviso na resposta), porque uma indisponibilidade da IA
 nunca pode impedir o envio de uma viatura.
 
+### 4. Frontend (Vite, porta 5173)
+
+```bash
+cd frontend/
+npm install
+npm run dev
+```
+
+A interface sobe em `http://localhost:5173` e fala **só** com o backend — ela
+nunca chama a porta 8000 diretamente. O endereço da API vem de `VITE_API_URL` e
+cai em `http://127.0.0.1:3333/api/v1` quando a variável não existe.
+
+O login de demonstração é o admin criado pelo seed:
+`admin@bombeiros.local` / `admin12345`.
+
+> No Windows, `npm run dev` do backend usa `tsx --watch`, que reage a cada
+> evento de arquivo. Com o projeto dentro do OneDrive a sincronização dispara
+> eventos sem parar e o servidor entra em laço de reinício sem nunca escutar na
+> porta. Nesse caso rode `npx tsx ./src/server.ts`, sem o watcher.
+
+### Popular o banco com um ano de ocorrências
+
+```bash
+cd backend/
+npm run seed:occurrences
+```
+
+O `backend/prisma/seed.ts` cria a hierarquia de unidades e o primeiro admin. Já
+o `backend/scripts/seed-occurrences.ts` escreve **370 ocorrências ao longo de
+doze meses**, com bairros de peso diferente, sazonalidade, perfis de horário por
+natureza e endereços recorrentes — é o que faz a tela de estatísticas ter o que
+mostrar.
+
+Ele é determinístico e grava um backup do que vai apagar em `backend/.backups/`
+antes de mexer. **Atenção:** apagar uma ocorrência arrasta seus despachos e as
+rotas calculadas para eles.
+
 ### Principais rotas da API
 
 Todas exigem autenticação via JWT, aceito no header `Authorization: Bearer` ou
@@ -532,6 +574,25 @@ projeto-integrador/
 │   ├── package.json
 │   └── tsconfig.json
 ├── frontend/
+│   ├── src/
+│   │   ├── api/               # Cliente HTTP, endpoints, tipos e tradução de mensagens
+│   │   ├── auth/              # Contexto de sessão e guardas de rota
+│   │   ├── components/
+│   │   │   ├── charts/        # Gráficos em SVG: treinamento e distribuições
+│   │   │   ├── layout/        # Kit visual: painéis, tabelas, campos, modal
+│   │   │   ├── mapa/          # Mapa de rota (2D/3D) e mapa de ocorrências
+│   │   │   └── ui/            # Primitivas do shadcn usadas pela barra
+│   │   ├── hooks/             # useResource, useMutation, useRealtime, useMeasure
+│   │   ├── lib/               # Formatação, distância geodésica, utilidades
+│   │   ├── pages/             # Uma tela por arquivo
+│   │   ├── App.tsx            # Rotas e guardas
+│   │   └── main.tsx
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.ts
+├── docs/
+│   ├── documentacao.md        # O sistema explicado para quem não o escreveu
+│   └── guia-de-slides.md      # Roteiro de apresentação
 ├── .gitignore
 ├── CLAUDE.md
 └── README.md
