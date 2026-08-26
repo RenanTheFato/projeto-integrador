@@ -16,7 +16,8 @@ export class ListOccurrencesController {
       to: z.coerce.date().optional(),
       search: z.string().max(128).optional(),
       page: z.coerce.number().int().min(1).default(1),
-      per_page: z.coerce.number().int().min(1).max(100).default(20)
+      per_page: z.coerce.number().int().min(1).max(100).default(20),
+      sort: z.enum(["queue", "recent"]).default("queue")
     })
 
     try {

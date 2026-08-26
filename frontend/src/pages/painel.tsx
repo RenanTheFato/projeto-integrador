@@ -52,8 +52,12 @@ export default function Painel() {
     [refreshKey],
   )
 
+  // "Últimas ocorrências" means the latest ones. The list endpoint defaults to
+  // the dispatcher's queue — most serious first, oldest waiting first — which
+  // over a year of history puts the oldest critical calls at the top and made
+  // this panel show incidents from the previous year.
   const recent = useResource(
-    () => occurrences.list({ per_page: 8 }),
+    () => occurrences.list({ per_page: 8, sort: "recent" }),
     [refreshKey],
   )
 

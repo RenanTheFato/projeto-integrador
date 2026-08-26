@@ -191,6 +191,13 @@ export type OccurrenceListParams = ListParams & {
   priority?: OccurrencePriority
   from?: string
   to?: string
+  /**
+   * `queue` (the default) is the dispatcher's board — most serious first, and
+   * within the same severity whatever has waited longest. `recent` is a feed of
+   * what just happened. The two are opposite orders, so a screen that wants the
+   * latest incidents has to ask for it.
+   */
+  sort?: "queue" | "recent"
 }
 
 export const occurrences = {
@@ -233,12 +240,17 @@ export const occurrences = {
     params: OccurrenceListParams = {},
     maxPages = 10,
   ): Promise<{ items: Occurrence[], total: number, truncated: boolean }> {
-    const first = await occurrences.list({ ...params, page: 1, per_page: 100 })
+    // Newest first, because when the ceiling truncates the set the screen says
+    // it kept the most recent — under the default order it would have kept the
+    // most serious instead, and said the wrong thing.
+    const query = { sort: "recent" as const, ...params, per_page: 100 }
+
+    const first = await occurrences.list({ ...query, page: 1 })
 
     const pages = Math.min(Math.ceil(first.total / 100), maxPages)
     const rest = await Promise.all(
       Array.from({ length: Math.max(0, pages - 1) }, (_, index) =>
-        occurrences.list({ ...params, page: index + 2, per_page: 100 })),
+        occurrences.list({ ...query, page: index + 2 })),
     )
 
     const items = [...first.items, ...rest.flatMap((page) => page.items)]
