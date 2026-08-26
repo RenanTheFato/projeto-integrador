@@ -38,7 +38,8 @@ const REGISTRY: NavItem[] = [
   { to: "/viaturas", label: "Viaturas" },
   { to: "/guarnicoes", label: "Guarnições" },
   { to: "/turnos", label: "Turnos" },
-  { to: "/unidades", label: "Unidades" },
+  { to: "/unidades", label: "Unidades", roles: ["ADMIN", "COMANDANTE"] },
+  { to: "/usuarios", label: "Usuários", roles: ["ADMIN"] },
 ]
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -48,7 +49,11 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
   )
 
 export default function Navbar() {
-  const { user, logout } = useAuth()
+  const { user, logout, can } = useAuth()
+
+  // Screens the current role cannot open are not shown at all: the guard would
+  // bounce the user back and the dead link would only be confusing.
+  const registry = REGISTRY.filter((item) => !item.roles || can(item.roles))
   const navigate = useNavigate()
   const { connected } = useRealtime(() => undefined)
 
@@ -100,7 +105,7 @@ export default function Navbar() {
 
           {registryOpen && (
             <div className="absolute right-0 top-9 z-40 flex w-52 flex-col border bg-white shadow-xl">
-              {REGISTRY.map((item) => (
+              {registry.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -147,13 +152,13 @@ export default function Navbar() {
           Sair
         </button>
 
-        <MobileNav onLogout={handleLogout} />
+        <MobileNav onLogout={handleLogout} registry={registry} />
       </div>
     </header>
   )
 }
 
-function MobileNav({ onLogout }: { onLogout: () => void }) {
+function MobileNav({ onLogout, registry }: { onLogout: () => void, registry: NavItem[] }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -166,7 +171,7 @@ function MobileNav({ onLogout }: { onLogout: () => void }) {
 
       <SheetContent side="right" className="bg-white">
         <nav className="mt-10 flex flex-col gap-1 p-4">
-          {[...OPERATIONAL, ...REGISTRY].map((item) => (
+          {[...OPERATIONAL, ...registry].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

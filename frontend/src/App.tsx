@@ -17,6 +17,7 @@ import Viaturas from "@/pages/viaturas"
 import Guarnicoes from "@/pages/guarnicoes"
 import Turnos from "@/pages/turnos"
 import Unidades from "@/pages/unidades"
+import Usuarios from "@/pages/usuarios"
 
 /** Everything inside the guard shares the bar; the login screen does not. */
 function Shell() {
@@ -49,6 +50,11 @@ export default function App() {
         {/* Only these two roles may touch the hierarchy of units. */}
         <Route element={<RequireRole roles={["ADMIN", "COMANDANTE"]} />}>
           <Route path="/unidades" element={<Unidades />} />
+        </Route>
+
+        {/* Creating accounts is the administrator's alone. */}
+        <Route element={<RequireRole roles={["ADMIN"]} />}>
+          <Route path="/usuarios" element={<Usuarios />} />
         </Route>
       </Route>
 
