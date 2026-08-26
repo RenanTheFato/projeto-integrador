@@ -8,18 +8,21 @@
 
 import { useCallback, useState } from "react"
 import type { FormEvent } from "react"
-import { ArrowLeft, Brain, MapPin, Route as RouteIcon, Send, Truck } from "lucide-react"
+import { ArrowLeft, Brain, MapPin, Pencil, Route as RouteIcon, Send, Truck } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 
 import { crews, dispatches, occurrences, vehicles } from "@/api/endpoints"
 import {
   DISPATCH_NEXT_STATUSES, DISPATCH_STATUS_LABEL, DISPATCH_STATUS_TONE,
-  NATURE_LABEL, OCCURRENCE_STATUS_LABEL, OCCURRENCE_STATUS_TONE,
-  PRIORITY_LABEL, PRIORITY_TONE, VEHICLE_TYPE_LABEL,
+  NATURE_LABEL, OCCURRENCE_NEXT_STATUSES, OCCURRENCE_STATUS_LABEL, OCCURRENCE_STATUS_TONE,
+  PRIORITY_LABEL, PRIORITY_TONE, VEHICLE_TYPE_LABEL, optionsOf,
 } from "@/api/labels"
-import type { Dispatch, DispatchStatus, Occurrence, RouteVariant } from "@/api/types"
+import type {
+  Dispatch, DispatchStatus, Occurrence, OccurrencePriority, OccurrenceStatus, RouteVariant,
+} from "@/api/types"
 import {
-  ActionButton, Badge, Field, Modal, Page, PageHeader, Panel, Select,
+  ActionButton, Badge, ConfirmButton, Field, Modal, Page, PageHeader, Panel, Select,
+  TextArea, TextInput,
 } from "@/components/layout/kit"
 import { EmptyState, ErrorBox, ErrorDetails, FullPageSpinner } from "@/components/layout/feedback"
 import RouteMap from "@/components/mapa/route-map"
@@ -33,6 +36,7 @@ import {
 export default function OcorrenciaDetalhe() {
   const { id = "" } = useParams()
   const [dispatching, setDispatching] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   const detail = useResource(() => occurrences.get(id), [id], { enabled: Boolean(id) })
   const reload = detail.reload
@@ -45,6 +49,11 @@ export default function OcorrenciaDetalhe() {
 
     if (touchesThis) reload()
   }, [id, reload]))
+
+  // Declared before the early returns below: hooks cannot be conditional.
+  const changeStatus = useMutation(
+    (status: OccurrenceStatus) => occurrences.update(id, { status }),
+  )
 
   if (detail.loading && !detail.data) return <FullPageSpinner label="Carregando ocorrência..." />
   if (detail.error) return <Page><ErrorBox message={detail.error} onRetry={detail.reload} /></Page>
@@ -70,15 +79,35 @@ export default function OcorrenciaDetalhe() {
       <PageHeader
         title={`Ocorrência ${occurrence.protocol}`}
         subtitle={`${NATURE_LABEL[occurrence.nature]} — aberta ${formatElapsed(occurrence.opened_at)}`}
-        actions={
-          !closed && (
+        actions={!closed && (
+          <>
+            <ActionButton tone="neutral" onClick={() => setEditing(true)}>
+              <Pencil className="h-4 w-4" />
+              Editar
+            </ActionButton>
+
+            {OCCURRENCE_NEXT_STATUSES[occurrence.status].map((status) => (
+              <ConfirmButton
+                key={status}
+                label={status === "ENCERRADA" ? "Encerrar" : "Cancelar ocorrência"}
+                confirmLabel={status === "ENCERRADA" ? "Confirmar encerramento" : "Confirmar cancelamento"}
+                disabled={changeStatus.submitting}
+                onConfirm={async () => {
+                  const updated = await changeStatus.run(status)
+                  if (updated) detail.reload()
+                }}
+              />
+            ))}
+
             <ActionButton tone="primary" onClick={() => setDispatching(true)}>
               <Send className="h-5 w-5" />
               Despachar viatura
             </ActionButton>
-          )
-        }
+          </>
+        )}
       />
+
+      {changeStatus.error && <ErrorBox message={changeStatus.error} />}
 
       <div className={`flex items-center gap-4 border px-5 py-4 ${PRIORITY_TONE[occurrence.priority]}`}>
         <OccurrenceAvatar nature={occurrence.nature} size="lg" />
@@ -146,6 +175,14 @@ export default function OcorrenciaDetalhe() {
           </Panel>
         </div>
       </div>
+
+      {editing && (
+        <EditOccurrenceModal
+          occurrence={occurrence}
+          onClose={() => setEditing(false)}
+          onSaved={() => { setEditing(false); detail.reload() }}
+        />
+      )}
 
       {dispatching && (
         <DispatchModal
@@ -377,6 +414,61 @@ function DispatchModal({ occurrence, onClose, onDispatched }: {
           <ActionButton tone="ghost" type="button" onClick={onClose}>Cancelar</ActionButton>
           <ActionButton tone="primary" type="submit" disabled={send.submitting || !vehicleId}>
             {send.submitting ? "Despachando..." : "Confirmar despacho"}
+          </ActionButton>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+/**
+ * Editing is limited to what `UpdateOccurrenceService` accepts: the priority,
+ * the address and the report. Nature and coordinates are immutable — a wrong
+ * one is a different incident, not an edit.
+ */
+function EditOccurrenceModal({ occurrence, onClose, onSaved }: {
+  occurrence: Occurrence
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [priority, setPriority] = useState<string>(occurrence.priority)
+  const [address, setAddress] = useState(occurrence.address)
+  const [description, setDescription] = useState(occurrence.description)
+
+  const save = useMutation(() => occurrences.update(occurrence.id, {
+    priority: priority as OccurrencePriority,
+    address: address.trim(),
+    description: description.trim(),
+  }))
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    const updated = await save.run(undefined)
+    if (updated) onSaved()
+  }
+
+  return (
+    <Modal title={`Editar ${occurrence.protocol}`} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {save.error && <ErrorBox message={save.error} />}
+        <ErrorDetails details={save.details} />
+
+        <Field label="Prioridade" required>
+          <Select value={priority} onChange={setPriority} options={optionsOf(PRIORITY_LABEL)} />
+        </Field>
+
+        <Field label="Endereço" required>
+          <TextInput required value={address} onChange={(event) => setAddress(event.target.value)} />
+        </Field>
+
+        <Field label="Relato" required>
+          <TextArea required value={description} onChange={(event) => setDescription(event.target.value)} />
+        </Field>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <ActionButton tone="ghost" type="button" onClick={onClose}>Cancelar</ActionButton>
+          <ActionButton tone="primary" type="submit" disabled={save.submitting}>
+            {save.submitting ? "Salvando..." : "Salvar"}
           </ActionButton>
         </div>
       </form>

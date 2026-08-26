@@ -7,6 +7,7 @@
  * figures a dispatcher reads at a glance.
  */
 
+import { useEffect, useState } from "react"
 import type { ChangeEvent, ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
@@ -110,6 +111,45 @@ export function ActionButton({ tone = "neutral", className, children, ...props }
     >
       {children}
     </button>
+  )
+}
+
+/**
+ * Destructive action guarded by a second click.
+ *
+ * A native `confirm()` would block the page — and the backend answers 409 when
+ * a record still has links, so the mistake this guards against is common
+ * enough to be worth the extra tap.
+ */
+export function ConfirmButton({ label, confirmLabel, onConfirm, disabled, className }: {
+  label: ReactNode
+  confirmLabel: string
+  onConfirm: () => void
+  disabled?: boolean
+  className?: string
+}) {
+  const [armed, setArmed] = useState(false)
+
+  useEffect(() => {
+    if (!armed) return
+    const timer = window.setTimeout(() => setArmed(false), 4000)
+    return () => window.clearTimeout(timer)
+  }, [armed])
+
+  return (
+    <ActionButton
+      tone={armed ? "danger" : "ghost"}
+      type="button"
+      disabled={disabled}
+      className={className}
+      onClick={() => {
+        if (!armed) { setArmed(true); return }
+        setArmed(false)
+        onConfirm()
+      }}
+    >
+      {armed ? confirmLabel : label}
+    </ActionButton>
   )
 }
 

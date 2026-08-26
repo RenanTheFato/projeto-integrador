@@ -150,6 +150,18 @@ export const OCCURRENCE_STATUS_TONE: Record<OccurrenceStatus, string> = {
   CANCELADA: "bg-neutral-500",
 }
 
+/**
+ * Allowed status transitions, mirroring `UpdateOccurrenceService`. An incident
+ * only moves forward, and the interface offers exactly what the backend takes.
+ */
+export const OCCURRENCE_NEXT_STATUSES: Record<OccurrenceStatus, OccurrenceStatus[]> = {
+  ABERTA: ["CANCELADA"],
+  DESPACHADA: ["ENCERRADA", "CANCELADA"],
+  EM_ATENDIMENTO: ["ENCERRADA"],
+  ENCERRADA: [],
+  CANCELADA: [],
+}
+
 export const DISPATCH_STATUS_LABEL: Record<DispatchStatus, string> = {
   DESPACHADO: "Despachado",
   A_CAMINHO: "A caminho",
