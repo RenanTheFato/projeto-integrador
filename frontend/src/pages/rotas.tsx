@@ -7,9 +7,9 @@
  * incident: pick a station, pick a destination, compare.
  */
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import type { FormEvent } from "react"
-import { Brain, Compass, Route as RouteIcon } from "lucide-react"
+import { Brain, Compass, MapPin, Route as RouteIcon } from "lucide-react"
 
 import { ai, units } from "@/api/endpoints"
 import type { RoutePreview } from "@/api/types"
@@ -19,7 +19,8 @@ import {
 import { ErrorBox, ErrorDetails } from "@/components/layout/feedback"
 import RouteMap from "@/components/mapa/route-map"
 import { useMutation, useResource } from "@/hooks/use-resource"
-import { formatDistance, formatDuration } from "@/lib/format"
+import { formatCoordinate, formatDistance, formatDuration } from "@/lib/format"
+import { nearestTo, stationsOf } from "@/lib/geo"
 
 /** Taubaté's centre — a sane starting point for the destination fields. */
 const DEFAULT_DESTINATION = { latitude: "-23.0330", longitude: "-45.5620" }
@@ -37,7 +38,65 @@ export default function Rotas() {
   const calculate = useMutation(ai.calculateRoute)
   const [result, setResult] = useState<{ neural: RoutePreview, shortest: RoutePreview } | null>(null)
 
+  // Theater gives the map the page's whole width, laid out the way the
+  // statistics map already is, and pushes the comparison underneath instead of
+  // beside it. The map keeps its element and therefore its camera and its 3D
+  // state; only the box around it changes shape.
+  const [theater, setTheater] = useState(false)
+
   const model = useResource(() => ai.model(), [])
+  const coverage = model.data?.bounds ?? null
+
+  const destination = {
+    latitude: Number(destinationLatitude),
+    longitude: Number(destinationLongitude),
+  }
+
+  const destinationValid =
+    Number.isFinite(destination.latitude) && Number.isFinite(destination.longitude)
+    && destinationLatitude.trim() !== "" && destinationLongitude.trim() !== ""
+
+  // Warned before the request, not after it comes back rejected. The rectangle
+  // is the extent of the street graph; the AI still refuses a point inside it
+  // that is more than `max_snap_distance_m` from an actual mapped street, so
+  // this catches the obvious mistake and the service catches the subtle one.
+  const outsideCoverage = Boolean(
+    coverage && destinationValid && (
+      destination.latitude < coverage.min_latitude
+      || destination.latitude > coverage.max_latitude
+      || destination.longitude < coverage.min_longitude
+      || destination.longitude > coverage.max_longitude
+    ),
+  )
+
+  /**
+   * Every station that can be plotted, ready for the map.
+   *
+   * They are drawn from the moment the screen opens, before any destination
+   * exists, which is the whole point: the dispatcher can see the layout of the
+   * city's stations and judge which one is worth departing from.
+   */
+  const stations = useMemo(() => stationsOf(unitList.data?.items), [unitList.data])
+
+  const nearest = useMemo(
+    () => (destinationValid ? nearestTo(destination, stations) : null),
+    // The destination object is rebuilt every render; its two numbers are what
+    // actually change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [destinationValid, destination.latitude, destination.longitude, stations],
+  )
+
+  const nearestIsOrigin = originMode === "unit" && nearest?.item.id === unitId
+
+  function handlePick(latitude: number, longitude: number) {
+    setDestinationLatitude(latitude.toFixed(6))
+    setDestinationLongitude(longitude.toFixed(6))
+  }
+
+  function handleStationSelect(id: string) {
+    setOriginMode("unit")
+    setUnitId(id)
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -67,7 +126,7 @@ export default function Rotas() {
           {calculate.error && <ErrorBox message={calculate.error} />}
           <ErrorDetails details={calculate.details} />
 
-          <div className="grid gap-4 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Field label="Origem">
               <Select
                 value={originMode}
@@ -102,19 +161,50 @@ export default function Rotas() {
               </>
             )}
 
-            <Field label="Latitude do destino" required>
+            <Field label="Latitude do destino" required hint="Ou clique direto no mapa">
               <TextInput value={destinationLatitude} onChange={(event) => setDestinationLatitude(event.target.value)} />
             </Field>
 
-            <Field label="Longitude do destino" required>
+            <Field label="Longitude do destino" required hint="Use ponto decimal, não vírgula">
               <TextInput value={destinationLongitude} onChange={(event) => setDestinationLongitude(event.target.value)} />
             </Field>
           </div>
 
+          {nearest && !outsideCoverage && (
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border border-[#1565C0] bg-[#1565C0]/10 px-4 py-2 text-neutral-900">
+              <MapPin className="h-4 w-4 shrink-0 text-[#1565C0]" />
+              <span>
+                Quartel mais próximo do destino: <strong>{nearest.item.acronym}</strong> —{" "}
+                {nearest.item.name}, a {formatDistance(nearest.meters)} em linha reta.
+              </span>
+              {nearestIsOrigin
+                ? <span className="text-sm font-semibold text-[#1565C0]">Já é a origem selecionada.</span>
+                : (
+                  <button
+                    type="button"
+                    onClick={() => handleStationSelect(nearest.item.id)}
+                    className="text-sm font-semibold text-[#1565C0] underline underline-offset-2 hover:text-[#0f4c8f]"
+                  >
+                    Usar como origem
+                  </button>
+                )}
+            </p>
+          )}
+
+          {outsideCoverage && coverage && (
+            <p className="border border-[#E8A240] bg-[#E8A240]/15 px-4 py-2 text-neutral-900">
+              Esse destino está fora do retângulo tracejado no mapa, que é toda a malha viária
+              que o modelo conhece. A malha vai de {formatCoordinate(coverage.min_latitude)} a{" "}
+              {formatCoordinate(coverage.max_latitude)} de latitude e de{" "}
+              {formatCoordinate(coverage.min_longitude)} a {formatCoordinate(coverage.max_longitude)} de
+              longitude.
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-neutral-600">
               {model.data
-                ? `Malha de ${model.data.city}: ${model.data.graph_nodes.toLocaleString("pt-BR")} nós e ${model.data.graph_edges.toLocaleString("pt-BR")} ruas. Pontos a mais de 2 km da malha são recusados.`
+                ? `Malha de ${model.data.city}: ${model.data.graph_nodes.toLocaleString("pt-BR")} nós e ${model.data.graph_edges.toLocaleString("pt-BR")} ruas. Pontos a mais de ${((coverage?.max_snap_distance_m ?? 2000) / 1000).toLocaleString("pt-BR")} km de uma rua mapeada são recusados — o norte rural do município quase não tem ruas no OpenStreetMap.`
                 : "O ponto precisa cair dentro da malha viária de Taubaté."}
             </p>
 
@@ -126,14 +216,25 @@ export default function Rotas() {
         </form>
       </Panel>
 
-      <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
+      <div className={theater ? "flex flex-col gap-5" : "grid gap-5 xl:grid-cols-[1.6fr_1fr]"}>
         <Panel title="Traçado" icon={<RouteIcon className="h-5 w-5" />}>
           <RouteMap
             route={result?.neural.geometry ?? null}
             comparison={result?.shortest.geometry ?? null}
+            coverage={coverage}
+            onPick={handlePick}
+            pin={!result && destinationValid ? destination : null}
+            stations={stations}
+            selectedStationId={originMode === "unit" ? unitId : null}
+            nearestStationId={nearest?.item.id ?? null}
+            onStationSelect={handleStationSelect}
             originLabel="Origem"
             destinationLabel="Destino"
-            className="h-[520px] w-full"
+            theater={theater}
+            onTheaterToggle={() => setTheater((current) => !current)}
+            className={theater
+              ? "h-[78vh] min-h-[420px] w-full"
+              : "h-[60vh] max-h-[640px] min-h-[340px] w-full"}
             emptyMessage="Informe origem e destino e calcule para ver o traçado."
           />
         </Panel>

@@ -6,25 +6,28 @@
  * driven by the priority the backend stores.
  */
 
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import type { FormEvent } from "react"
-import { Filter, Plus, Search } from "lucide-react"
+import { Filter, MapPin, Plus, Search } from "lucide-react"
 import { Link } from "react-router-dom"
 
-import { occurrences, units } from "@/api/endpoints"
+import { ai, occurrences, units } from "@/api/endpoints"
 import {
   NATURE_LABEL, OCCURRENCE_STATUS_LABEL, OCCURRENCE_STATUS_TONE,
   PRIORITY_LABEL, PRIORITY_TONE, optionsOf,
 } from "@/api/labels"
 import type { Occurrence, OccurrenceNature, OccurrencePriority, OccurrenceStatus } from "@/api/types"
 import {
-  ActionButton, Badge, Field, Modal, Page, PageHeader, Pagination, Panel, Select, TextArea, TextInput,
+  ActionButton, Badge, Field, FieldButton, Modal, Page, PageHeader, Pagination, Panel, Select,
+  TextArea, TextInput,
 } from "@/components/layout/kit"
 import { EmptyState, ErrorBox, ErrorDetails, LoadingBlock } from "@/components/layout/feedback"
+import RouteMap from "@/components/mapa/route-map"
 import { OccurrenceAvatar } from "@/components/occurrence-icon"
 import { useRealtime } from "@/hooks/use-realtime"
 import { useMutation, useResource } from "@/hooks/use-resource"
-import { formatElapsed, formatShort } from "@/lib/format"
+import { formatDistance, formatElapsed, formatShort } from "@/lib/format"
+import { nearestTo, stationsOf } from "@/lib/geo"
 
 const PER_PAGE = 12
 
@@ -76,7 +79,7 @@ export default function Ocorrencias() {
       />
 
       <Panel title="Filtros" icon={<Filter className="h-5 w-5" />}>
-        <form onSubmit={applyFilters} className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <form onSubmit={applyFilters} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <Field label="Situação">
             <Select
               value={status}
@@ -104,20 +107,20 @@ export default function Ocorrencias() {
             />
           </Field>
 
-          <Field label="Busca" hint="Protocolo, endereço ou descrição">
+          <Field label="Busca">
             <TextInput
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="2026-000012, Rua..."
+              placeholder="Protocolo, endereço ou descrição"
             />
           </Field>
 
-          <div className="flex items-end">
-            <ActionButton tone="neutral" type="submit" className="w-full">
+          <FieldButton>
+            <ActionButton tone="neutral" type="submit" className="w-full py-2">
               <Search className="h-4 w-4" />
               Buscar
             </ActionButton>
-          </div>
+          </FieldButton>
         </form>
       </Panel>
 
@@ -154,8 +157,11 @@ export default function Ocorrencias() {
 
 function OccurrenceCard({ occurrence }: { occurrence: Occurrence }) {
   return (
-    <Link to={`/ocorrencias/${occurrence.id}`} className="flex border bg-white transition hover:shadow-lg">
-      <div className={`flex items-center gap-4 px-5 py-4 ${PRIORITY_TONE[occurrence.priority]} min-w-0 flex-1`}>
+    <Link
+      to={`/ocorrencias/${occurrence.id}`}
+      className="flex flex-col border bg-white transition hover:shadow-lg sm:flex-row"
+    >
+      <div className={`flex items-center gap-3 px-4 py-4 sm:gap-4 sm:px-5 ${PRIORITY_TONE[occurrence.priority]} min-w-0 flex-1`}>
         <OccurrenceAvatar nature={occurrence.nature} />
 
         <div className="min-w-0">
@@ -167,7 +173,9 @@ function OccurrenceCard({ occurrence }: { occurrence: Occurrence }) {
         </div>
       </div>
 
-      <div className="flex w-40 shrink-0 flex-col items-center justify-center gap-2 border-l px-3 py-4">
+      {/* On a phone the protocol column sits under the card instead of
+          squeezing the address into a couple of characters. */}
+      <div className="flex w-full shrink-0 flex-row items-center justify-between gap-2 border-t px-4 py-3 sm:w-40 sm:flex-col sm:justify-center sm:border-l sm:border-t-0 sm:px-3 sm:py-4">
         <span className="font-mono text-sm text-neutral-600">{occurrence.protocol}</span>
         <Badge tone={OCCURRENCE_STATUS_TONE[occurrence.status]}>
           {OCCURRENCE_STATUS_LABEL[occurrence.status]}
@@ -182,6 +190,7 @@ function OccurrenceCard({ occurrence }: { occurrence: Occurrence }) {
 
 function CreateOccurrenceModal({ onClose, onCreated }: { onClose: () => void, onCreated: () => void }) {
   const unitList = useResource(() => units.list({ active: true }), [])
+  const model = useResource(() => ai.model(), [])
 
   const [nature, setNature] = useState<string>("INCENDIO_EDIFICACAO")
   const [priority, setPriority] = useState<string>("ALTA")
@@ -194,6 +203,22 @@ function CreateOccurrenceModal({ onClose, onCreated }: { onClose: () => void, on
   const [callerPhone, setCallerPhone] = useState("")
 
   const create = useMutation(occurrences.create)
+
+  const stations = useMemo(() => stationsOf(unitList.data?.items), [unitList.data])
+
+  const point = { latitude: Number(latitude), longitude: Number(longitude) }
+  const pointValid =
+    latitude.trim() !== "" && longitude.trim() !== ""
+    && Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
+
+  // The unit that answers a call is normally the one that can get there first,
+  // so the form offers the nearest station instead of leaving the operator to
+  // work it out from a dropdown of acronyms.
+  const nearest = useMemo(
+    () => (pointValid ? nearestTo(point, stations) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pointValid, point.latitude, point.longitude, stations],
+  )
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -259,6 +284,45 @@ function CreateOccurrenceModal({ onClose, onCreated }: { onClose: () => void, on
             <TextInput required value={longitude} onChange={(event) => setLongitude(event.target.value)} />
           </Field>
         </div>
+
+        {/* Typing coordinates blind is how an incident ends up in the middle of
+            a field. The map shows where the point landed and where the stations
+            are around it, and a click moves the point. */}
+        <RouteMap
+          route={null}
+          coverage={model.data?.bounds ?? null}
+          onPick={(pickedLatitude, pickedLongitude) => {
+            setLatitude(pickedLatitude.toFixed(6))
+            setLongitude(pickedLongitude.toFixed(6))
+          }}
+          pin={pointValid ? { ...point, label: "Local da ocorrência" } : null}
+          stations={stations}
+          selectedStationId={unitId}
+          nearestStationId={nearest?.item.id ?? null}
+          onStationSelect={setUnitId}
+          className="h-[220px] w-full sm:h-[300px] lg:h-[340px]"
+        />
+
+        {nearest && (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border border-[#1565C0] bg-[#1565C0]/10 px-4 py-2 text-neutral-900">
+            <MapPin className="h-4 w-4 shrink-0 text-[#1565C0]" />
+            <span>
+              Quartel mais próximo do local: <strong>{nearest.item.acronym}</strong> —{" "}
+              {nearest.item.name}, a {formatDistance(nearest.meters)} em linha reta.
+            </span>
+            {nearest.item.id === unitId
+              ? <span className="text-sm font-semibold text-[#1565C0]">Já é a unidade responsável.</span>
+              : (
+                <button
+                  type="button"
+                  onClick={() => setUnitId(nearest.item.id)}
+                  className="text-sm font-semibold text-[#1565C0] underline underline-offset-2 hover:text-[#0f4c8f]"
+                >
+                  Definir como unidade responsável
+                </button>
+              )}
+          </p>
+        )}
 
         <Field label="Descrição" required hint="O que o solicitante relatou">
           <TextArea

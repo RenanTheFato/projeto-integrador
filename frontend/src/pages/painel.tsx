@@ -34,8 +34,16 @@ export default function Painel() {
     bump()
   })
 
+  // An incident is only off the board once it is closed or cancelled. Counting
+  // the severity over ABERTA alone made every figure read "Leves", because a
+  // serious call is dispatched within seconds and leaves that bucket at once.
   const open = useResource(
     () => occurrences.list({ status: "ABERTA", per_page: 100 }),
+    [refreshKey],
+  )
+
+  const dispatched = useResource(
+    () => occurrences.list({ status: "DESPACHADA", per_page: 100 }),
     [refreshKey],
   )
 
@@ -54,10 +62,15 @@ export default function Painel() {
   const openDispatches = useResource(() => dispatches.list({ open: true, per_page: 100 }), [refreshKey])
   const model = useResource(() => ai.model(), [])
 
-  const openList = open.data?.items ?? []
-  const severe = openList.filter((item) => item.priority === "ALTA" || item.priority === "CRITICA").length
-  const medium = openList.filter((item) => item.priority === "MEDIA").length
-  const light = openList.filter((item) => item.priority === "BAIXA").length
+  const activeList = [
+    ...(open.data?.items ?? []),
+    ...(dispatched.data?.items ?? []),
+    ...(inProgress.data?.items ?? []),
+  ]
+
+  const severe = activeList.filter((item) => item.priority === "ALTA" || item.priority === "CRITICA").length
+  const medium = activeList.filter((item) => item.priority === "MEDIA").length
+  const light = activeList.filter((item) => item.priority === "BAIXA").length
 
   const available = (fleet.data?.items ?? []).filter((vehicle) => vehicle.status === "DISPONIVEL").length
   const committed = (fleet.data?.items ?? []).filter((vehicle) => vehicle.status === "EMPENHADA").length
@@ -69,18 +82,22 @@ export default function Painel() {
         subtitle="Situação corrente do atendimento em Taubaté"
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="flex flex-col gap-2 border bg-white px-5 py-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="flex flex-col gap-2 border bg-white px-4 py-4 sm:px-5">
           <div className="flex items-center gap-2 text-neutral-700">
             <TriangleAlert className="h-7 w-7" />
-            <p className="text-lg">Ocorrências abertas</p>
+            <p className="text-lg">Ocorrências em aberto</p>
           </div>
 
           <div className="flex items-end justify-around pt-1">
-            <Figure value={severe} label="Graves" tone="text-red-600" />
-            <Figure value={medium} label="Médias" tone="text-orange-600" />
-            <Figure value={light} label="Leves" tone="text-green-600" />
+            <Figure value={severe} label="Graves" tone="text-red-600" hint="Prioridade alta ou crítica" />
+            <Figure value={medium} label="Médias" tone="text-orange-600" hint="Prioridade média" />
+            <Figure value={light} label="Leves" tone="text-green-600" hint="Prioridade baixa" />
           </div>
+
+          <p className="text-sm text-neutral-500">
+            Aguardando, despachadas ou em atendimento
+          </p>
         </div>
 
         <StatBox
@@ -107,7 +124,7 @@ export default function Painel() {
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[2fr_1fr]">
+      <div className="grid gap-4 sm:gap-5 lg:grid-cols-[2fr_1fr]">
         <Panel
           title="Últimas ocorrências"
           icon={<Clock className="h-5 w-5" />}
@@ -168,11 +185,17 @@ export default function Painel() {
   )
 }
 
-function Figure({ value, label, tone }: { value: number, label: string, tone: string }) {
+function Figure({ value, label, tone, hint }: {
+  value: number
+  label: string
+  tone: string
+  /** Spells out which priorities land in this bucket, on hover. */
+  hint?: string
+}) {
   return (
-    <div className="flex flex-col items-center">
-      <p className={`text-4xl font-bold ${tone}`}>{value}</p>
-      <p className={`text-lg font-semibold ${tone}`}>{label}</p>
+    <div className="flex flex-col items-center" title={hint}>
+      <p className={`text-3xl font-bold sm:text-4xl ${tone}`}>{value}</p>
+      <p className={`text-base font-semibold sm:text-lg ${tone}`}>{label}</p>
     </div>
   )
 }

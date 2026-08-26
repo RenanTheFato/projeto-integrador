@@ -6,12 +6,13 @@
  * side by side in numbers, for the very dispatch that was sent.
  */
 
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import { ArrowLeft, Brain, MapPin, Pencil, Route as RouteIcon, Send, Truck } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 
-import { crews, dispatches, occurrences, vehicles } from "@/api/endpoints"
+import { crews, dispatches, occurrences, units, vehicles } from "@/api/endpoints"
+import { translateMessage } from "@/api/messages"
 import {
   DISPATCH_NEXT_STATUSES, DISPATCH_STATUS_LABEL, DISPATCH_STATUS_TONE,
   NATURE_LABEL, OCCURRENCE_NEXT_STATUSES, OCCURRENCE_STATUS_LABEL, OCCURRENCE_STATUS_TONE,
@@ -30,13 +31,15 @@ import { OccurrenceAvatar } from "@/components/occurrence-icon"
 import { useRealtime } from "@/hooks/use-realtime"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import {
-  formatCoordinate, formatDateTime, formatDistance, formatDuration, formatElapsed,
+  formatCoordinate, formatDateTime, formatDistance, formatDuration, formatElapsed, toNumber,
 } from "@/lib/format"
+import { stationsOf } from "@/lib/geo"
 
 export default function OcorrenciaDetalhe() {
   const { id = "" } = useParams()
   const [dispatching, setDispatching] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [theater, setTheater] = useState(false)
 
   const detail = useResource(() => occurrences.get(id), [id], { enabled: Boolean(id) })
   const reload = detail.reload
@@ -54,6 +57,10 @@ export default function OcorrenciaDetalhe() {
   const changeStatus = useMutation(
     (status: OccurrenceStatus) => occurrences.update(id, { status }),
   )
+
+  const unitList = useResource(() => units.list({ active: true }), [])
+
+  const stations = useMemo(() => stationsOf(unitList.data?.items), [unitList.data])
 
   if (detail.loading && !detail.data) return <FullPageSpinner label="Carregando ocorrência..." />
   if (detail.error) return <Page><ErrorBox message={detail.error} onRetry={detail.reload} /></Page>
@@ -109,15 +116,17 @@ export default function OcorrenciaDetalhe() {
 
       {changeStatus.error && <ErrorBox message={changeStatus.error} />}
 
-      <div className={`flex items-center gap-4 border px-5 py-4 ${PRIORITY_TONE[occurrence.priority]}`}>
-        <OccurrenceAvatar nature={occurrence.nature} size="lg" />
+      <div className={`flex flex-col gap-3 border px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5 ${PRIORITY_TONE[occurrence.priority]}`}>
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <OccurrenceAvatar nature={occurrence.nature} size="lg" />
 
-        <div className="min-w-0 flex-1">
-          <p className="text-2xl font-bold text-white">{NATURE_LABEL[occurrence.nature]}</p>
-          <p className="text-white/90">{occurrence.address}</p>
+          <div className="min-w-0 flex-1">
+            <p className="text-xl font-bold text-white sm:text-2xl">{NATURE_LABEL[occurrence.nature]}</p>
+            <p className="break-words text-white/90">{occurrence.address}</p>
+          </div>
         </div>
 
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-row-reverse flex-wrap items-center justify-end gap-2 sm:ml-auto sm:flex-col sm:items-end">
           <Badge tone={OCCURRENCE_STATUS_TONE[occurrence.status]}>
             {OCCURRENCE_STATUS_LABEL[occurrence.status]}
           </Badge>
@@ -125,7 +134,9 @@ export default function OcorrenciaDetalhe() {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_1.4fr]">
+      <div className={theater
+        ? "flex flex-col-reverse gap-4 sm:gap-5"
+        : "grid gap-4 sm:gap-5 lg:grid-cols-[1fr_1.4fr]"}>
         <div className="flex flex-col gap-5">
           <Panel title="Detalhes" icon={<MapPin className="h-5 w-5" />}>
             <Detail term="Solicitante" value={occurrence.caller_name ?? "Não informado"} />
@@ -148,13 +159,27 @@ export default function OcorrenciaDetalhe() {
         </div>
 
         <div className="flex flex-col gap-5">
-          <Panel title="Rota calculada" icon={<RouteIcon className="h-5 w-5" />} className="min-h-[420px]">
+          <Panel title="Rota calculada" icon={<RouteIcon className="h-5 w-5" />}>
+            {/* Before a vehicle is sent there is no route to draw, but there
+                is still something worth seeing: where the call is and which
+                stations surround it. */}
             <RouteMap
               route={neural?.geometry ?? null}
               comparison={shortest?.geometry ?? null}
+              stations={stations}
+              selectedStationId={occurrence.unit_id}
+              pin={neural ? null : {
+                latitude: toNumber(occurrence.latitude) ?? 0,
+                longitude: toNumber(occurrence.longitude) ?? 0,
+                label: `Ocorrência ${occurrence.protocol}`,
+              }}
+              theater={theater}
+              onTheaterToggle={() => setTheater((current) => !current)}
               originLabel="Saída da viatura"
               destinationLabel={`Ocorrência ${occurrence.protocol}`}
-              className="h-[420px] w-full"
+              className={theater
+                ? "h-[78vh] min-h-[420px] w-full"
+                : "h-[45vh] min-h-[320px] w-full sm:h-[420px]"}
               emptyMessage="Nenhum despacho com rota calculada para esta ocorrência."
             />
           </Panel>
@@ -227,7 +252,7 @@ function RouteComparison({ neural, shortest }: { neural: RouteVariant | null, sh
 
   return (
     <Panel title="Comparação de rotas" icon={<Brain className="h-5 w-5" />}>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Variant title="Rede neural" accent="border-[#E53935]" route={neural} />
         <Variant title="Menor distância" accent="border-[#1565C0]" route={shortest} />
       </div>
@@ -364,7 +389,7 @@ function DispatchModal({ occurrence, onClose, onDispatched }: {
     // A dispatch without routes means the AI was unreachable. The vehicle is
     // on its way regardless, so this is a warning, not a failure.
     if (result.routes.length === 0) {
-      setWarning(result.message ?? "Viatura despachada, mas a rota não pôde ser calculada.")
+      setWarning(translateMessage(result.message ?? "Viatura despachada, mas a rota não pôde ser calculada."))
       window.setTimeout(onDispatched, 2500)
       return
     }

@@ -56,7 +56,7 @@ export default function Usuarios() {
         subtitle="Contas de acesso ao painel — apenas administradores podem criar"
       />
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+      <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
         <Panel title="Nova conta" icon={<UserPlus className="h-5 w-5" />}>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {register.error && <ErrorBox message={register.error} />}
