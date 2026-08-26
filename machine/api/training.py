@@ -26,6 +26,11 @@ class TrainingJob:
         self.job_id = str(uuid.uuid4())
         self.epochs = epochs
         self.status = "PENDENTE"
+        self.current_epoch: int | None = None
+        # Every line the trainer printed, so the client can draw the curve
+        # instead of the single last point. A 5000-epoch run reports 100 times,
+        # which is small enough to carry in the job and store as JSON.
+        self.history: list[dict] = []
         self.train_loss: float | None = None
         self.validation_loss: float | None = None
         self.best_validation_loss: float | None = None
@@ -39,6 +44,8 @@ class TrainingJob:
             "job_id": self.job_id,
             "status": self.status,
             "epochs": self.epochs,
+            "current_epoch": self.current_epoch,
+            "history": self.history,
             "train_loss": self.train_loss,
             "validation_loss": self.validation_loss,
             "best_validation_loss": self.best_validation_loss,
@@ -152,6 +159,23 @@ class TrainingManager:
             job.best_validation_loss = float(parts[3])
         except ValueError:
             return
+
+        # The first column is "300/800". Reporting it is what lets the client
+        # show progress: the losses alone say nothing about how far along a run
+        # is, and a run of 800 epochs takes minutes with no other signal.
+        try:
+            job.current_epoch = int(parts[0].split("/")[0])
+        except ValueError:
+            return
+
+        job.history.append(
+            {
+                "epoch": job.current_epoch,
+                "train_loss": job.train_loss,
+                "validation_loss": job.validation_loss,
+                "best_validation_loss": job.best_validation_loss,
+            }
+        )
 
 
 manager = TrainingManager()

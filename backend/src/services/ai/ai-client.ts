@@ -14,10 +14,28 @@ export interface RouteResponse {
   model_version: string | null
 }
 
+/// One line of the trainer's progress table.
+///
+/// Declared as a type alias rather than an interface so it can be handed to
+/// Prisma's `Json` column: only an alias gets the implicit index signature
+/// that `InputJsonValue` demands.
+export type TrainingPoint = {
+  epoch: number,
+  train_loss: number | null,
+  validation_loss: number | null,
+  best_validation_loss: number | null
+}
+
 export interface TrainingJob {
   job_id: string,
   status: "PENDENTE" | "EXECUTANDO" | "CONCLUIDO" | "FALHOU",
   epochs: number,
+  /// Last epoch the trainer reported. It moves in steps of 50, which is how
+  /// often the trainer prints, and stops early when the run does.
+  current_epoch: number | null,
+  /// Every reported epoch, in order, so the client can draw the loss curve
+  /// rather than a single final number.
+  history: TrainingPoint[],
   train_loss: number | null,
   validation_loss: number | null,
   best_validation_loss: number | null,
@@ -27,12 +45,24 @@ export interface TrainingJob {
   model_path: string | null
 }
 
+/// The rectangle the street network spans. A point inside the city but far
+/// from any mapped road is still refused, so the client needs the real extent
+/// to warn before sending rather than after.
+export interface GraphBounds {
+  min_latitude: number,
+  max_latitude: number,
+  min_longitude: number,
+  max_longitude: number,
+  max_snap_distance_m: number
+}
+
 export interface ModelInfo {
   loaded: boolean,
   model_version: string | null,
   city: string,
   graph_nodes: number,
-  graph_edges: number
+  graph_edges: number,
+  bounds: GraphBounds | null
 }
 
 /// Thin HTTP client for the Python (FastAPI) side. Every network failure is

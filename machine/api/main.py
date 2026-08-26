@@ -68,6 +68,7 @@ def model_info() -> dict:
         "city": CITY,
         "graph_nodes": nodes,
         "graph_edges": edges,
+        "bounds": engine.bounds,
     }
 
 

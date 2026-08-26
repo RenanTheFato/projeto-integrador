@@ -51,6 +51,8 @@ export class GetTrainingService {
         where: { id },
         data: {
           status: job.status,
+          current_epoch: job.current_epoch,
+          history: job.history,
           train_loss: job.train_loss,
           validation_loss: job.validation_loss,
           best_validation_loss: job.best_validation_loss,

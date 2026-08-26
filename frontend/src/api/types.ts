@@ -188,18 +188,53 @@ export interface RoutePreview {
   geometry: [number, number][]
 }
 
+/**
+ * The rectangle the street network spans.
+ *
+ * The place polygon and the drivable network are not the same thing: the rural
+ * north of the municipality has almost no mapped roads, so a point can be
+ * inside Taubaté and still be refused. `max_snap_distance_m` is how far from a
+ * mapped street the AI still accepts a point.
+ */
+export interface GraphBounds {
+  min_latitude: number
+  max_latitude: number
+  min_longitude: number
+  max_longitude: number
+  max_snap_distance_m: number
+}
+
 export interface ModelInfo {
   loaded: boolean
   model_version: string | null
   city: string
   graph_nodes: number
   graph_edges: number
+  bounds: GraphBounds | null
+}
+
+/**
+ * One line of the trainer's progress table.
+ *
+ * The Python trainer prints every 50 epochs; each of those lines becomes one
+ * of these, and the whole series is stored on the run as JSON so the screen can
+ * draw the curve instead of only the final numbers.
+ */
+export interface TrainingPoint {
+  epoch: number
+  train_loss: number | null
+  validation_loss: number | null
+  best_validation_loss: number | null
 }
 
 export interface TrainingRun {
   id: string
   status: TrainingStatus
   epochs: number
+  /** Last epoch the trainer reported; it advances in steps of 50. */
+  current_epoch: number | null
+  /** Null for runs that finished before the progress was recorded. */
+  history: TrainingPoint[] | null
   train_loss: number | null
   validation_loss: number | null
   best_validation_loss: number | null

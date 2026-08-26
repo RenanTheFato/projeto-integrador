@@ -53,6 +53,31 @@ class RouteEngine:
             return (0, 0)
         return (self._graph.number_of_nodes(), self._graph.number_of_edges())
 
+    @property
+    def bounds(self) -> dict | None:
+        """
+        The rectangle the loaded street network actually spans.
+
+        The place polygon and the drivable network are not the same thing: the
+        rural north of the municipality has almost no mapped roads, so a point
+        can be inside Taubate and still be far from anything routable. Exposing
+        the real extent lets the interface say where a point may be dropped
+        instead of leaving the dispatcher to discover it from a rejection.
+        """
+        if not self._loaded:
+            return None
+
+        latitudes = [data["y"] for _, data in self._graph.nodes(data=True)]
+        longitudes = [data["x"] for _, data in self._graph.nodes(data=True)]
+
+        return {
+            "min_latitude": min(latitudes),
+            "max_latitude": max(latitudes),
+            "min_longitude": min(longitudes),
+            "max_longitude": max(longitudes),
+            "max_snap_distance_m": MAX_SNAP_DISTANCE_M,
+        }
+
     def load(self) -> None:
         """Download the graph, load the checkpoint and weight every edge."""
         with self._lock:

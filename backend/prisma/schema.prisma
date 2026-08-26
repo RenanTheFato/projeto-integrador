@@ -438,6 +438,11 @@ model TrainingRun {
   status TrainingStatus @default(PENDENTE)
 
   epochs          Int
+  /// Ultima epoca reportada pelo treinador, para acompanhar o progresso.
+  current_epoch   Int?
+  /// Serie completa de metricas reportadas, uma entrada a cada 50 epocas.
+  /// Guardada como JSON porque so e lida inteira, para desenhar a curva.
+  history         Json?
   train_loss      Float?
   validation_loss Float?
   best_validation_loss Float?
