@@ -17,7 +17,11 @@
   "scripts": {
     "dev": "tsx --watch ./src/server.ts",
     "start": "node dist/server.js",
-    "build": "tsc"
+    "build": "tsc",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:e2e": "node ./scripts/e2e-test.mjs"
   },
   "keywords": [
     "nodejs",
@@ -29,8 +33,11 @@
     "Artificial Intelligence"
   ],
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^25.6.1",
+    "jest": "^30.4.2",
     "prisma": "^7.8.0",
+    "ts-jest": "^29.4.12",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   },
@@ -38,11 +45,15 @@
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
+    "@fastify/jwt": "^10.2.2",
     "@fastify/rate-limit": "^10.3.0",
+    "@fastify/websocket": "^11.3.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
+    "fastify-plugin": "^6.0.0",
     "fastify-type-provider-zod": "^6.1.0",
     "pg": "^8.21.0",
     "zod": "^4.4.3"
