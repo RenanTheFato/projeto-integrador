@@ -12,6 +12,7 @@ Mudanças críticas em relação à tentativa anterior com GNN:
      validação, evitando que o modelo memorize as arestas vistas no treino.
 """
 
+import argparse
 import os
 import sys
 
@@ -266,7 +267,10 @@ def train() -> None:
         else:
             epochs_without_improve += 1
 
-        if epoch % 50 == 0:
+        # The last epoch always prints: the training service reads the
+        # losses from these lines, and without it a short run would
+        # finish without a single metric recorded.
+        if epoch % 50 == 0 or epoch == EPOCHS:
             lr = optimizer.param_groups[0]["lr"]
             print(
                 f"  {epoch:>6}/{EPOCHS}"
@@ -305,4 +309,16 @@ def train() -> None:
     print(f"Modelo salvo em: {MODEL_PATH}")
 
 if __name__ == "__main__":
+    # O servidor FastAPI dispara este script como subprocesso e precisa poder
+    # escolher a quantidade de epocas; sem argumento, mantem o padrao de 800.
+    parser = argparse.ArgumentParser(description="Treina a rede GAT + MLP.")
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=EPOCHS,
+        help=f"Numero de epocas de treino (padrao: {EPOCHS})",
+    )
+    args = parser.parse_args()
+
+    EPOCHS = args.epochs
     train()
