@@ -92,8 +92,12 @@ class TrainingManager:
         try:
             # A subprocess keeps the trainer's memory out of the API process and
             # guarantees it is released when the run ends.
+            # -u keeps the child's stdout unbuffered. Without it Python block
+            # buffers the pipe (8 KB) and the trainer's ~16 progress lines only
+            # arrive when the process exits, so polling would report no metrics
+            # for the whole run.
             process = subprocess.Popen(
-                [sys.executable, TRAIN_SCRIPT, "--epochs", str(job.epochs)],
+                [sys.executable, "-u", TRAIN_SCRIPT, "--epochs", str(job.epochs)],
                 cwd=MACHINE_ROOT,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
