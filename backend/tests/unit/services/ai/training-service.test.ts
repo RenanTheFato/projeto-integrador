@@ -106,6 +106,23 @@ describe("GetTrainingService", () => {
     expect(result).toHaveProperty("train_loss", 0.1)
   })
 
+  it("marks the run as FALHOU when the AI service no longer knows the job", async () => {
+    mockPrisma.trainingRun.findUnique.mockResolvedValueOnce({
+      id: "run1", status: "EXECUTANDO", external_job_id: "job1", started_at: new Date("2026-01-01")
+    })
+    aiClientMock.__mock.getTraining.mockRejectedValueOnce(new NotFoundError("Training job not found"))
+    mockPrisma.trainingRun.update.mockResolvedValueOnce({ id: "run1", status: "FALHOU" })
+
+    const result = await service.execute("run1")
+
+    // Left as EXECUTANDO the row would block every future run with a 409.
+    expect(mockPrisma.trainingRun.update).toHaveBeenCalledWith({
+      where: { id: "run1" },
+      data: expect.objectContaining({ status: "FALHOU" })
+    })
+    expect(result).toHaveProperty("status", "FALHOU")
+  })
+
   it("falls back to the last known run when the AI service is unreachable", async () => {
     const staleRun = { id: "run1", status: "EXECUTANDO", external_job_id: "job1", started_at: new Date("2026-01-01") }
     mockPrisma.trainingRun.findUnique.mockResolvedValueOnce(staleRun)

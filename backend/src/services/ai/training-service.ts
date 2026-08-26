@@ -61,6 +61,21 @@ export class GetTrainingService {
         }
       })
     } catch (error) {
+      // The Python service keeps its jobs in memory only. A 404 means it was
+      // restarted while this run was in flight, so the job is gone and will
+      // never progress. Leaving the row as EXECUTANDO would block every future
+      // training with a 409 and there is no endpoint to clear it by hand.
+      if (error instanceof NotFoundError) {
+        return prisma.trainingRun.update({
+          where: { id },
+          data: {
+            status: "FALHOU",
+            finished_at: new Date(),
+            error_message: "The AI service no longer knows this job. It was most likely restarted while the run was in progress."
+          }
+        })
+      }
+
       // A transient AI outage should not hide the run we already know about.
       console.error(`Could not refresh training run ${id}:`, error)
       return run
