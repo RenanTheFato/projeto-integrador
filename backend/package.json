@@ -21,7 +21,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:e2e": "node ./scripts/e2e-test.mjs"
+    "test:e2e": "node ./scripts/e2e-test.mjs",
+    "seed:occurrences": "tsx ./scripts/seed-occurrences.ts"
   },
   "keywords": [
     "nodejs",
