@@ -1,26 +1,459 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Modelo de dominio do sistema de roteamento inteligente para o Corpo de Bombeiros.
+//
+// A nomenclatura segue a estrutura real do CB/PMESP:
+//   Comando Geral -> Comando Regional -> Grupamento (GB) -> Subgrupamento (SGB) -> Posto (PB)
+// Taubate, cidade coberta pelo modelo de IA, e atendida pelo 11o GB (Sao Jose dos Campos).
+//
+// Identificadores em ingles para acompanhar o padrao ja existente no projeto;
+// os valores de enum preservam a nomenclatura oficial da corporacao.
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
+// Generator moderno do Prisma 7. O legado `prisma-client-js` gera um
+// package.json sem a condicao `types` nos exports ".", o que quebra a
+// resolucao de tipos sob "moduleResolution": "nodenext".
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+  moduleFormat = "esm"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-model Base {
-  id        String  @id @default(uuid())
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UnitType {
+  COMANDO_GERAL
+  COMANDO_REGIONAL
+  GRUPAMENTO
+  SUBGRUPAMENTO
+  POSTO
+}
+
+/// Postos (oficiais) e graduacoes (pracas), do mais alto ao mais baixo.
+enum Rank {
+  CORONEL
+  TENENTE_CORONEL
+  MAJOR
+  CAPITAO
+  PRIMEIRO_TENENTE
+  SEGUNDO_TENENTE
+  ASPIRANTE_OFICIAL
+  SUBTENENTE
+  PRIMEIRO_SARGENTO
+  SEGUNDO_SARGENTO
+  TERCEIRO_SARGENTO
+  CABO
+  SOLDADO_PRIMEIRA_CLASSE
+  SOLDADO_SEGUNDA_CLASSE
+}
+
+enum FirefighterStatus {
+  ATIVO
+  FERIAS
+  AFASTADO
+  INATIVO
+}
+
+enum UserRole {
+  ADMIN
+  COMANDANTE
+  OPERADOR
+}
+
+/// Siglas oficiais de viaturas operacionais.
+enum VehicleType {
+  ABT /// Auto Bomba Tanque
+  ABTF /// Auto Bomba Tanque Florestal
+  ABTR /// Auto Bomba Tanque Resgate
+  AT /// Auto Tanque
+  ASE /// Auto Salvamento Especifico
+  AEM /// Auto Escada Mecanica
+  APM /// Auto Plataforma Mecanica
+  UR /// Unidade de Resgate
+  MOB /// Moto Operacional Bombeiro
+  ABRESC /// Auto Busca, Resgate e Salvamento com Caes
+  AV /// Auto Viatura administrativa
+}
+
+enum VehicleStatus {
+  DISPONIVEL
+  EMPENHADA
+  MANUTENCAO
+  INDISPONIVEL
+}
+
+enum CrewRole {
+  COMANDANTE
+  MOTORISTA
+  COMBATENTE
+  SOCORRISTA
+}
+
+enum ShiftType {
+  PLANTAO_24X72
+  PLANTAO_12X36
+  EXPEDIENTE
+}
+
+enum OccurrenceNature {
+  INCENDIO_EDIFICACAO
+  INCENDIO_VEGETACAO
+  INCENDIO_VEICULO
+  SALVAMENTO
+  ATENDIMENTO_PRE_HOSPITALAR
+  PRODUTOS_PERIGOSOS
+  AFOGAMENTO
+  CAPTURA_ANIMAL
+  VISTORIA
+  OUTROS
+}
+
+enum OccurrencePriority {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum OccurrenceStatus {
+  ABERTA
+  DESPACHADA
+  EM_ATENDIMENTO
+  ENCERRADA
+  CANCELADA
+}
+
+enum DispatchStatus {
+  DESPACHADO
+  A_CAMINHO
+  NO_LOCAL
+  RETORNANDO
+  FINALIZADO
+  CANCELADO
+}
+
+/// NEURAL usa a GAT+MLP treinada; DIJKSTRA e a rota mais curta em metros,
+/// mantida para comparacao lado a lado no mapa.
+enum RouteAlgorithm {
+  NEURAL
+  DIJKSTRA
+}
+
+enum TrainingStatus {
+  PENDENTE
+  EXECUTANDO
+  CONCLUIDO
+  FALHOU
+}
+
+// ---------------------------------------------------------------------------
+// Estrutura organizacional
+// ---------------------------------------------------------------------------
+
+/// Unidade da corporacao. A hierarquia e autorrelacionada: um Posto aponta para
+/// seu Subgrupamento, que aponta para o Grupamento, e assim por diante.
+model Unit {
+  id        String   @id @default(uuid())
   name      String
+  acronym   String   @unique
+  type      UnitType
   address   String
-  latitude  Decimal @db.Decimal(15, 12)
-  longitude Decimal @db.Decimal(15, 12)
+  latitude  Decimal  @db.Decimal(15, 12)
+  longitude Decimal  @db.Decimal(15, 12)
   phone     String
+  active    Boolean  @default(true)
+
+  parent_id String?
+  parent    Unit?   @relation("UnitHierarchy", fields: [parent_id], references: [id], onDelete: Restrict)
+  children  Unit[]  @relation("UnitHierarchy")
+
+  firefighters Firefighter[]
+  vehicles     Vehicle[]
+  crews        Crew[]
+  shifts       Shift[]
+  occurrences  Occurrence[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  @@map("base")
+  @@index([parent_id])
+  @@index([type])
+  @@map("unit")
+}
+
+model Firefighter {
+  id             String            @id @default(uuid())
+  name           String
+  war_name       String /// Nome de guerra, usado no dia a dia da corporacao
+  military_id    String            @unique /// RG militar / matricula
+  cpf            String            @unique
+  rank           Rank
+  status         FirefighterStatus @default(ATIVO)
+  phone          String
+  email          String?           @unique
+  admission_date DateTime
+
+  unit_id String
+  unit    Unit   @relation(fields: [unit_id], references: [id], onDelete: Restrict)
+
+  user         User?
+  crew_members CrewMember[]
+  shifts       Shift[]
+  commanded_crews Crew[] @relation("CrewCommander")
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([unit_id])
+  @@index([status])
+  @@map("firefighter")
+}
+
+/// Credencial de acesso. Fica separada de Firefighter porque nem todo militar
+/// opera o sistema, e um administrador pode nao ser militar.
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password_hash String
+  role          UserRole  @default(OPERADOR)
+  active        Boolean   @default(true)
+  last_login_at DateTime?
+
+  firefighter_id String?      @unique
+  firefighter    Firefighter? @relation(fields: [firefighter_id], references: [id], onDelete: SetNull)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("user")
+}
+
+// ---------------------------------------------------------------------------
+// Recursos operacionais
+// ---------------------------------------------------------------------------
+
+model Vehicle {
+  id                   String        @id @default(uuid())
+  prefix               String        @unique /// Prefixo operacional, ex: "ABT-11201"
+  type                 VehicleType
+  plate                String        @unique
+  model                String
+  year                 Int
+  water_capacity_liters Int?         /// Somente para viaturas com tanque
+  crew_capacity        Int
+  status               VehicleStatus @default(DISPONIVEL)
+
+  /// Ultima posicao conhecida; alimenta o rastreamento em tempo real.
+  current_latitude  Decimal? @db.Decimal(15, 12)
+  current_longitude Decimal? @db.Decimal(15, 12)
+
+  unit_id String
+  unit    Unit   @relation(fields: [unit_id], references: [id], onDelete: Restrict)
+
+  crews      Crew[]
+  dispatches Dispatch[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([unit_id])
+  @@index([status])
+  @@map("vehicle")
+}
+
+/// Guarnicao: a equipe embarcada em uma viatura durante um turno.
+model Crew {
+  id         String    @id @default(uuid())
+  name       String
+  started_at DateTime
+  ended_at   DateTime?
+  active     Boolean   @default(true)
+
+  unit_id String
+  unit    Unit   @relation(fields: [unit_id], references: [id], onDelete: Restrict)
+
+  vehicle_id String
+  vehicle    Vehicle @relation(fields: [vehicle_id], references: [id], onDelete: Restrict)
+
+  commander_id String?
+  commander    Firefighter? @relation("CrewCommander", fields: [commander_id], references: [id], onDelete: SetNull)
+
+  members    CrewMember[]
+  dispatches Dispatch[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([unit_id])
+  @@index([vehicle_id])
+  @@index([active])
+  @@map("crew")
+}
+
+model CrewMember {
+  id   String   @id @default(uuid())
+  role CrewRole
+
+  crew_id String
+  crew    Crew   @relation(fields: [crew_id], references: [id], onDelete: Cascade)
+
+  firefighter_id String
+  firefighter    Firefighter @relation(fields: [firefighter_id], references: [id], onDelete: Restrict)
+
+  created_at DateTime @default(now())
+
+  @@unique([crew_id, firefighter_id])
+  @@index([firefighter_id])
+  @@map("crew_member")
+}
+
+/// Escala de servico do militar.
+model Shift {
+  id       String    @id @default(uuid())
+  type     ShiftType
+  start_at DateTime
+  end_at   DateTime
+
+  firefighter_id String
+  firefighter    Firefighter @relation(fields: [firefighter_id], references: [id], onDelete: Cascade)
+
+  unit_id String
+  unit    Unit   @relation(fields: [unit_id], references: [id], onDelete: Restrict)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([firefighter_id])
+  @@index([start_at, end_at])
+  @@map("shift")
+}
+
+// ---------------------------------------------------------------------------
+// Atendimento
+// ---------------------------------------------------------------------------
+
+model Occurrence {
+  id          String             @id @default(uuid())
+  protocol    String             @unique
+  nature      OccurrenceNature
+  priority    OccurrencePriority @default(MEDIA)
+  status      OccurrenceStatus   @default(ABERTA)
+  description String
+
+  address   String
+  latitude  Decimal @db.Decimal(15, 12)
+  longitude Decimal @db.Decimal(15, 12)
+
+  caller_name  String?
+  caller_phone String?
+
+  /// Unidade responsavel pelo atendimento.
+  unit_id String
+  unit    Unit   @relation(fields: [unit_id], references: [id], onDelete: Restrict)
+
+  opened_at DateTime  @default(now())
+  closed_at DateTime?
+
+  dispatches Dispatch[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([status])
+  @@index([unit_id])
+  @@index([opened_at])
+  @@map("occurrence")
+}
+
+/// Empenho: o vinculo entre uma ocorrencia e a viatura enviada para atende-la.
+/// E aqui que a rota calculada pela IA se conecta a operacao.
+model Dispatch {
+  id     String         @id @default(uuid())
+  status DispatchStatus @default(DESPACHADO)
+
+  occurrence_id String
+  occurrence    Occurrence @relation(fields: [occurrence_id], references: [id], onDelete: Cascade)
+
+  vehicle_id String
+  vehicle    Vehicle @relation(fields: [vehicle_id], references: [id], onDelete: Restrict)
+
+  crew_id String?
+  crew    Crew?   @relation(fields: [crew_id], references: [id], onDelete: SetNull)
+
+  dispatched_at DateTime  @default(now())
+  arrived_at    DateTime?
+  finished_at   DateTime?
+
+  routes Route[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([occurrence_id])
+  @@index([vehicle_id])
+  @@index([status])
+  @@map("dispatch")
+}
+
+// ---------------------------------------------------------------------------
+// Integracao com a IA
+// ---------------------------------------------------------------------------
+
+/// Rota calculada pelo servico Python. Guardamos as duas variantes (neural e
+/// mais curta) para permitir a comparacao que o projeto se propoe a demonstrar.
+model Route {
+  id        String         @id @default(uuid())
+  algorithm RouteAlgorithm
+
+  origin_latitude       Decimal @db.Decimal(15, 12)
+  origin_longitude      Decimal @db.Decimal(15, 12)
+  destination_latitude  Decimal @db.Decimal(15, 12)
+  destination_longitude Decimal @db.Decimal(15, 12)
+
+  distance_meters        Int
+  estimated_time_seconds Float
+  node_count             Int
+
+  /// Lista de coordenadas [[lat, lon], ...] que desenha a rota no mapa.
+  geometry Json
+
+  model_version String?
+
+  dispatch_id String?
+  dispatch    Dispatch? @relation(fields: [dispatch_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now())
+
+  @@index([dispatch_id])
+  @@map("route")
+}
+
+/// Execucao de treinamento disparada pela API. O servico Python roda em
+/// background e atualiza o progresso; o Node apenas registra e consulta.
+model TrainingRun {
+  id     String         @id @default(uuid())
+  status TrainingStatus @default(PENDENTE)
+
+  epochs          Int
+  train_loss      Float?
+  validation_loss Float?
+  best_validation_loss Float?
+
+  started_at  DateTime?
+  finished_at DateTime?
+
+  error_message String?
+  model_path    String?
+
+  /// Identificador devolvido pelo servico Python, usado para consultar o progresso.
+  external_job_id String? @unique
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([status])
+  @@map("training_run")
 }
