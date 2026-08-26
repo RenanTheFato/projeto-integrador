@@ -49,6 +49,12 @@ export function formatDistance(meters: number | null | undefined): string {
   return `${(meters / 1000).toFixed(2).replace(".", ",")} km`
 }
 
+/** A loss, at the four decimals that distinguish one training run from another. */
+export function formatLoss(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—"
+  return value.toFixed(4).replace(".", ",")
+}
+
 /** Prisma sends Decimal as a string; the map and the maths need a number. */
 export function toNumber(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined) return null

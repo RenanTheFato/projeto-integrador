@@ -15,12 +15,14 @@ import type { Feature, LineString } from "geojson"
 
 import { ROUTE_ALT, ROUTE_COLOR } from "@/components/mapa/constants/constants"
 import type { LngLat } from "@/components/mapa/routes/utils"
+import type { GraphBounds } from "@/api/types"
 
 const COMPARISON_COLOR = "#1565C0"
 
 const FLAT_SOURCE = "src-flat"
 const LIFTED_SOURCE = "src-lifted"
 const COMPARISON_SOURCE = "src-comparison"
+const COVERAGE_SOURCE = "src-coverage"
 
 const LAYERS_2D = ["comparison-2d", "glow-2d", "line-2d", "dash-2d"]
 const LAYERS_3D = ["shadow-3d", "glow-3d", "line-3d", "dash-3d"]
@@ -110,6 +112,52 @@ export function addRouteLayers(map: maplibregl.Map, coords: LngLat[], comparison
     layout: { "line-cap": "butt", "line-join": "round", visibility: "none" },
     paint: { "line-color": "#fff", "line-width": 2, "line-dasharray": [4, 6], "line-opacity": 0.4 },
   })
+}
+
+/**
+ * The rectangle the street network spans, drawn as a faint outline.
+ *
+ * The AI refuses any point more than two kilometres from a mapped street, and
+ * the only way a dispatcher could find that out was by getting the request
+ * rejected. Showing the boundary turns that into something visible before the
+ * click.
+ */
+function coverageFeature(bounds: GraphBounds | null | undefined): Feature<LineString> {
+  if (!bounds) return lineFeature([])
+
+  const { min_latitude, max_latitude, min_longitude, max_longitude } = bounds
+
+  return lineFeature([
+    [min_longitude, min_latitude],
+    [max_longitude, min_latitude],
+    [max_longitude, max_latitude],
+    [min_longitude, max_latitude],
+    [min_longitude, min_latitude],
+  ])
+}
+
+export function addCoverageLayer(map: maplibregl.Map, bounds: GraphBounds | null | undefined) {
+  if (map.getSource(COVERAGE_SOURCE)) return
+
+  map.addSource(COVERAGE_SOURCE, { type: "geojson", data: coverageFeature(bounds) })
+
+  map.addLayer({
+    id: "coverage-outline",
+    type: "line",
+    source: COVERAGE_SOURCE,
+    layout: { "line-cap": "square", "line-join": "miter" },
+    paint: {
+      "line-color": "#4B5563",
+      "line-width": 2,
+      "line-opacity": 0.55,
+      "line-dasharray": [4, 3],
+    },
+  })
+}
+
+export function updateCoverageData(map: maplibregl.Map, bounds: GraphBounds | null | undefined) {
+  const source = map.getSource(COVERAGE_SOURCE) as maplibregl.GeoJSONSource | undefined
+  source?.setData(coverageFeature(bounds))
 }
 
 /** Redraws both stacks when a new route arrives, without rebuilding the map. */

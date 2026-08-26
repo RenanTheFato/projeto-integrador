@@ -3,11 +3,17 @@
         .maplibregl-ctrl-bottom-left,
         .maplibregl-ctrl-bottom-right { display: none; }
 
+        /* The control strip spans the whole width and centres its groups, so a
+           narrow map wraps them onto a second line instead of pushing them off
+           the edge. The strip itself is click-through — otherwise it would
+           swallow every drag that starts along the top of the map. */
         .top-controls {
-          position: absolute; top: 16px; left: 50%;
-          transform: translateX(-50%); z-index: 20;
-          display: flex; align-items: center; gap: 8px;
+          position: absolute; top: 12px; left: 12px; right: 12px; z-index: 20;
+          display: flex; flex-wrap: wrap; align-items: center;
+          justify-content: center; gap: 8px;
+          pointer-events: none;
         }
+        .top-controls > * { pointer-events: auto; }
 
         .toggle-wrap {
           display: flex;
@@ -21,12 +27,27 @@
           font-family: system-ui, sans-serif; font-size: 13px;
           font-weight: 600; letter-spacing: .5px; cursor: pointer;
           transition: background .2s, color .2s;
-          background: transparent; color: rgba(255,255,255,.42);
+          background: transparent; color: rgba(255,255,255,.66);
           display: flex; align-items: center; gap: 6px; white-space: nowrap;
         }
         .toggle-wrap button.active { background: #E53935; color: #fff; }
         .toggle-wrap button:hover:not(.active) {
-          background: rgba(255,255,255,.09); color: rgba(255,255,255,.82);
+          background: rgba(255,255,255,.12); color: #fff;
+        }
+
+        /* The comparison toggle wears the colour of the line it controls —
+           blue, like the dashed shortest-in-metres route — instead of the red
+           the 2D/3D pair uses for the neural one. The swatch and the wording
+           both change with the state so the polarity reads at a glance. */
+        .toggle-wrap button.compare { color: rgba(255,255,255,.7); }
+        .toggle-wrap button.compare.active { background: #1565C0; color: #fff; }
+        .toggle-wrap button.compare:hover:not(.active) {
+          background: rgba(21,101,192,.28); color: #fff;
+        }
+        .compare-swatch {
+          width: 16px; height: 0;
+          border-top: 3px dashed currentColor;
+          opacity: .9;
         }
 
         .cam-dropdown { position: relative; }
@@ -68,3 +89,27 @@
         .cam-option:hover    { background: rgba(255,255,255,.07); color: #fff; }
         .cam-option.selected { color: #fff; background: rgba(229,57,53,.18); }
         .cam-option.selected svg { color: #E53935; }
+
+        .map-hint {
+          position: absolute; bottom: 14px; left: 50%;
+          transform: translateX(-50%); z-index: 20;
+          padding: 7px 14px; border-radius: 8px;
+          background: rgba(0,0,0,0.66);
+          border: 1px solid rgba(255,255,255,0.14);
+          backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+          font-family: system-ui, sans-serif; font-size: 13px; font-weight: 600;
+          color: #fff; white-space: nowrap; pointer-events: none;
+        }
+
+        /* The view buttons carry an icon and a word; below the width where the
+           strip starts wrapping, the word goes and the icon stays. */
+        .toggle-wrap button.view { padding: 8px 14px; }
+        @media (max-width: 640px) {
+          .toggle-wrap button { padding: 8px 14px; }
+          .view-label { display: none; }
+        }
+
+        /* In real fullscreen the browser sizes the element, but the height
+           class the page put on it would still win — these two win back. */
+        .map-wrap:fullscreen { width: 100%; height: 100%; border: none; }
+        .map-wrap:-webkit-full-screen { width: 100%; height: 100%; border: none; }
