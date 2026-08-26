@@ -1,5 +1,5 @@
 import { env } from "../../config/env.js";
-import { BadRequestError, ServiceUnavailableError } from "../../errors/index.js";
+import { BadRequestError, ConflictError, NotFoundError, ServiceUnavailableError } from "../../errors/index.js";
 
 export interface RouteVariant {
   distance_meters: number,
@@ -66,12 +66,31 @@ export class AiClient {
     const text = await response.text()
     const payload = text ? JSON.parse(text) : null
 
+    // FastAPI answers a validation failure with an array of field errors, so
+    // the detail is not always a string and cannot go straight into a message.
+    const detail: string | null = typeof payload?.detail === "string"
+      ? payload.detail
+      : payload?.detail
+        ? JSON.stringify(payload.detail)
+        : null
+
+    // A 404 and a 409 carry meaning the caller has to act on: the job the
+    // service knew about is gone, or a training is already running there.
+    // Collapsing both into a 400 would hide that.
+    if (response.status === 404) {
+      throw new NotFoundError(detail ?? "The AI service does not know this resource")
+    }
+
+    if (response.status === 409) {
+      throw new ConflictError(detail ?? "The AI service refused a conflicting request")
+    }
+
     if (response.status >= 400 && response.status < 500) {
-      throw new BadRequestError(payload?.detail ?? "The AI service rejected the request")
+      throw new BadRequestError(detail ?? "The AI service rejected the request")
     }
 
     if (!response.ok) {
-      throw new ServiceUnavailableError(payload?.detail ?? `The AI service failed with status ${response.status}`)
+      throw new ServiceUnavailableError(detail ?? `The AI service failed with status ${response.status}`)
     }
 
     return payload as T

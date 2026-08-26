@@ -1,4 +1,4 @@
-import { BadRequestError, ServiceUnavailableError } from "../../../../src/errors/index.js"
+import { BadRequestError, ConflictError, NotFoundError, ServiceUnavailableError } from "../../../../src/errors/index.js"
 import { AiClient } from "../../../../src/services/ai/ai-client.js"
 
 function jsonResponse(status: number, body: unknown) {
@@ -45,6 +45,32 @@ describe("AiClient", () => {
     await expect(new AiClient().calculateRoute(
       { latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0 }
     )).rejects.toThrow("Coordinates are too far from the mapped road network")
+  })
+
+  it("throws NotFoundError when the AI service does not know the job", async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      jsonResponse(404, { detail: "Training job not found" })
+    ) as unknown as typeof fetch
+
+    await expect(new AiClient().getTraining("job1")).rejects.toThrow(NotFoundError)
+  })
+
+  it("throws ConflictError when the AI service is already training", async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      jsonResponse(409, { detail: "A training run is already in progress" })
+    ) as unknown as typeof fetch
+
+    await expect(new AiClient().startTraining(800)).rejects.toThrow(ConflictError)
+  })
+
+  it("keeps a validation detail readable when the AI service answers with a list", async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      jsonResponse(422, { detail: [{ loc: ["body", "origin_latitude"], msg: "Input should be greater than or equal to -90" }] })
+    ) as unknown as typeof fetch
+
+    await expect(new AiClient().calculateRoute(
+      { latitude: -999, longitude: 0 }, { latitude: 0, longitude: 0 }
+    )).rejects.toThrow(BadRequestError)
   })
 
   it("throws ServiceUnavailableError on a 5xx response", async () => {
