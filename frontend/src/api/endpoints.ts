@@ -184,11 +184,17 @@ export const shifts = {
 
 // -- Occurrences -------------------------------------------------------------
 
+export type OccurrenceListParams = ListParams & {
+  unit_id?: string
+  status?: OccurrenceStatus
+  nature?: OccurrenceNature
+  priority?: OccurrencePriority
+  from?: string
+  to?: string
+}
+
 export const occurrences = {
-  async list(params: ListParams & {
-    unit_id?: string, status?: OccurrenceStatus, nature?: OccurrenceNature,
-    priority?: OccurrencePriority, from?: string, to?: string,
-  } = {}): Promise<Paginated<Occurrence>> {
+  async list(params: OccurrenceListParams = {}): Promise<Paginated<Occurrence>> {
     const data = await api.get<Record<string, unknown>>(`/occurrences${query({ ...params })}`)
     return paginate<Occurrence>(data, "occurrences")
   },
@@ -210,6 +216,34 @@ export const occurrences = {
   async update(id: string, input: Record<string, unknown>): Promise<Occurrence> {
     const data = await api.patch<{ occurrence: Occurrence }>(`/occurrences/${id}`, input)
     return data.occurrence
+  },
+
+  /**
+   * Every occurrence matching the filters, not just the first page.
+   *
+   * The statistics screen counts and maps the whole set, and the list endpoint
+   * caps a page at 100 rows. The remaining pages are fetched at once and
+   * concatenated. `maxPages` is a deliberate ceiling rather than a loop until
+   * exhaustion: past a few thousand incidents the honest answer is an
+   * aggregation endpoint on the backend, not a browser holding the whole
+   * history in memory — and `truncated` says out loud when that line is
+   * crossed, so the screen can admit it instead of quietly under-reporting.
+   */
+  async listAll(
+    params: OccurrenceListParams = {},
+    maxPages = 10,
+  ): Promise<{ items: Occurrence[], total: number, truncated: boolean }> {
+    const first = await occurrences.list({ ...params, page: 1, per_page: 100 })
+
+    const pages = Math.min(Math.ceil(first.total / 100), maxPages)
+    const rest = await Promise.all(
+      Array.from({ length: Math.max(0, pages - 1) }, (_, index) =>
+        occurrences.list({ ...params, page: index + 2, per_page: 100 })),
+    )
+
+    const items = [...first.items, ...rest.flatMap((page) => page.items)]
+
+    return { items, total: first.total, truncated: items.length < first.total }
   },
 }
 
@@ -239,6 +273,29 @@ export const dispatches = {
   async updateStatus(id: string, status: DispatchStatus): Promise<Dispatch> {
     const data = await api.patch<{ dispatch: Dispatch }>(`/dispatches/${id}`, { status })
     return data.dispatch
+  },
+
+  /**
+   * Every dispatch, for the statistics screen to join against its incidents.
+   *
+   * There is no date filter on this endpoint, so the whole set comes back and
+   * the screen keeps only the dispatches whose incident survived its own
+   * filters. That is affordable while a dispatch is roughly one per incident
+   * and the incident ceiling is a thousand; the moment either stops being true
+   * the response time belongs in an aggregation on the backend.
+   */
+  async listAll(maxPages = 10): Promise<{ items: Dispatch[], truncated: boolean }> {
+    const first = await dispatches.list({ page: 1, per_page: 100 })
+
+    const pages = Math.min(Math.ceil(first.total / 100), maxPages)
+    const rest = await Promise.all(
+      Array.from({ length: Math.max(0, pages - 1) }, (_, index) =>
+        dispatches.list({ page: index + 2, per_page: 100 })),
+    )
+
+    const items = [...first.items, ...rest.flatMap((page) => page.items)]
+
+    return { items, truncated: items.length < first.total }
   },
 }
 

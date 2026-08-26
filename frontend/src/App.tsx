@@ -11,6 +11,7 @@ import Ocorrencias from "@/pages/ocorrencias"
 import OcorrenciaDetalhe from "@/pages/ocorrencia-detalhe"
 import Despachos from "@/pages/despachos"
 import Rotas from "@/pages/rotas"
+import Estatisticas from "@/pages/estatisticas"
 import RedeNeural from "@/pages/rede-neural"
 import Efetivo from "@/pages/efetivo"
 import Viaturas from "@/pages/viaturas"
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/ocorrencias/:id" element={<OcorrenciaDetalhe />} />
         <Route path="/despachos" element={<Despachos />} />
         <Route path="/rotas" element={<Rotas />} />
+        <Route path="/estatisticas" element={<Estatisticas />} />
         <Route path="/rede-neural" element={<RedeNeural />} />
 
         <Route path="/efetivo" element={<Efetivo />} />
