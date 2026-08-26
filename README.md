@@ -316,13 +316,175 @@ Uma box no canto inferior esquerdo mostra a distância (km/m) e o tempo estimado
 
 ---
 
+## Rodar a stack completa (backend + IA)
+
+O `main.py` acima é o modo interativo, útil para testar a rede sozinha. O
+sistema de verdade tem três processos, que sobem **nesta ordem**:
+
+### 1. Banco de dados
+
+O PostgreSQL precisa estar rodando. No Windows o cluster fica em `C:\pgsql-data`
+(fora do OneDrive, para não arriscar corrupção por sincronização).
+
+```bash
+cd backend/
+npx prisma migrate deploy   # aplica as migrations
+npx prisma generate         # regenera o client do Prisma
+npx prisma db seed          # hierarquia de unidades + primeiro admin
+```
+
+O seed cria o usuário `admin@bombeiros.local` com a senha `admin12345`, e a
+cadeia de unidades `CCB > CBI-1 > 11GB > PB-TAUBATE`. **Troque essa senha antes
+de qualquer uso real.**
+
+### 2. Serviço de IA (FastAPI, porta 8000)
+
+```bash
+cd machine/
+poetry run uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+
+Esse serviço é a ponte entre a rede neural e o backend. Ele carrega o grafo de
+Taubaté e aplica a GAT em todas as arestas **uma única vez, na inicialização** —
+por isso demora algumas dezenas de segundos para ficar pronto. Espere a linha:
+
+```
+Route engine ready: 8610 nodes, 20070 edges from Taubaté, São Paulo, Brasil
+```
+
+Ou consulte `http://127.0.0.1:8000/health` até `engine_loaded` virar `true`.
+
+| Rota | O que faz |
+|------|-----------|
+| `GET /health` | Diz se o serviço está de pé e se o modelo carregou |
+| `GET /model` | Versão do modelo, cidade, tamanho do grafo |
+| `POST /routes` | Recebe origem e destino, devolve a rota neural **e** a mais curta |
+| `POST /training` | Dispara um novo treino em segundo plano |
+| `GET /training/{id}` | Progresso do treino |
+
+O serviço não tem banco e não sabe o que é uma ocorrência: ele só responde
+"qual o melhor caminho entre esses dois pontos". Toda a regra de negócio fica
+no Node.
+
+Coordenadas a mais de 2 km da malha viária mapeada são recusadas com 400. Sem
+esse limite, um erro de digitação apontando para outro estado ainda assim seria
+"grudado" em alguma esquina de Taubaté, devolvendo uma rota confiante e sem
+sentido.
+
+### 3. Backend (Fastify, porta 3333)
+
+```bash
+cd backend/
+npm install
+npm run dev
+```
+
+A API sobe em `http://localhost:3333/api/v1`. O backend funciona mesmo com o
+serviço de IA fora do ar — mas aí `/ai/routes` responde 503, e um despacho é
+criado sem rota (com o aviso na resposta), porque uma indisponibilidade da IA
+nunca pode impedir o envio de uma viatura.
+
+### Principais rotas da API
+
+Todas exigem autenticação via JWT, aceito no header `Authorization: Bearer` ou
+no cookie httpOnly `token`. Os papéis são `ADMIN`, `COMANDANTE` e `OPERADOR`.
+
+| Recurso | O que é |
+|---------|----------|
+| `POST /auth/login`, `POST /auth/register` | Autenticação |
+| `/units` | Unidades da corporação (hierarquia autorrelacionada) |
+| `/firefighters` | Efetivo |
+| `/vehicles` | Viaturas |
+| `/crews` | Guarnições |
+| `/shifts` | Escalas de plantão |
+| `/occurrences` | Ocorrências |
+| `/dispatches` | Despacho de viatura para a ocorrência |
+| `/ai/routes`, `/ai/model`, `/ai/training` | Ponte com a IA |
+| `GET /realtime` | WebSocket com os eventos do despacho |
+
+O WebSocket transmite `occurrence.created`, `occurrence.updated`,
+`dispatch.created`, `dispatch.updated` e `vehicle.moved`. Como o navegador não
+consegue mandar header no handshake, o token vai na query string:
+`ws://localhost:3333/api/v1/realtime?token=<jwt>`.
+
+### Ciclo de vida de um despacho
+
+Criar um despacho faz três coisas numa transação só: registra o despacho, marca
+a viatura como `EMPENHADA` e move a ocorrência para `DESPACHADA`. Logo depois a
+rota é calculada pela IA, e as duas variantes (neural e Dijkstra) são gravadas
+lado a lado — é essa comparação que o projeto existe para demonstrar.
+
+O despacho anda por estados fixos, e pular etapa é recusado com 400:
+
+```
+DESPACHADO -> A_CAMINHO -> NO_LOCAL -> RETORNANDO -> FINALIZADO
+     |             |
+     +-------------+--> CANCELADO   (só antes de chegar ao local)
+```
+
+`NO_LOCAL` move a ocorrência para `EM_ATENDIMENTO`; `FINALIZADO` e `CANCELADO`
+liberam a viatura de volta para `DISPONIVEL`.
+
+### Teste de ponta a ponta
+
+Com os três processos no ar:
+
+```bash
+cd backend/
+npm run test:e2e
+```
+
+O script `backend/scripts/e2e-test.mjs` exercita a API como um cliente real —
+login, todos os CRUDs, o ciclo do despacho, o WebSocket e a ponte com a IA, sem
+nenhum stub. São 57 verificações; passar todas significa que Node, Postgres e o
+serviço Python estão realmente conversando entre si.
+
+### Testes unitários
+
+Diferente do e2e, os testes unitários (`backend/tests/`, rodados com Jest) não
+precisam do Postgres nem do serviço de IA no ar — cada teste mocka o Prisma
+Client (`jest.mock(".../config/prisma.js", ...)`) e, quando necessário, o
+`AiClient`, então rodam isolados e em segundos.
+
+```bash
+cd backend/
+npm test              # roda a suite uma vez
+npm run test:watch    # modo watch
+npm run test:coverage # com relatório de cobertura
+```
+
+Cobrem as regras de negócio dos services — hierarquia e ciclos em `Unit`,
+unicidade de CPF/matrícula/placa, a máquina de estados de `Dispatch` e
+`Occurrence`, o mapeamento de erros para status HTTP, o `AiClient` (sucesso,
+4xx, 5xx, timeout e falha de rede) — e não tocam banco real nem o serviço
+Python. `backend/jest.config.cjs` documenta duas peculiaridades do setup:
+
+- o cliente Prisma gerado usa `import.meta.url` no topo do arquivo (sintaxe
+  ESM), incompatível com a transformação para CommonJS que o Jest usa aqui;
+  por isso `tests/mocks/generated-prisma-client.ts` substitui esse módulo nos
+  testes, expondo só o que os services realmente usam em runtime dele
+  (`Prisma.Decimal`) — o resto é só tipo, apagado na compilação;
+- `resetMocks: true` limpa a implementação de cada mock antes de cada teste,
+  então qualquer mock "estrutural" (como `prisma.$transaction` chamando de
+  fato o callback recebido, ou `new AiClient()` retornando um objeto com
+  métodos mockados) precisa ser religado em um `beforeEach` — os testes de
+  `CreateDispatchService`, `UpdateDispatchService` e `training-service`
+  mostram o padrão.
+
+---
+
 ## Estrutura do Projeto
 
 ```
 projeto-integrador/
 ├── machine/
-│   ├── models/               # Modelo treinado (gerado localmente, no .gitignore)
-│   ├── rota.html             # Mapa gerado ao rodar main.py (no .gitignore)
+│   ├── api/                   # Serviço FastAPI que expõe a IA ao backend
+│   │   ├── __init__.py
+│   │   ├── main.py            # Rotas HTTP: /health, /model, /routes, /training
+│   │   ├── engine.py          # Grafo + modelo carregados uma vez, em memória
+│   │   └── training.py        # Roda o train.py como subprocesso, um job por vez
+│   ├── models/                # Modelo treinado (gerado localmente, no .gitignore)
+│   ├── rota.html              # Mapa gerado ao rodar main.py (no .gitignore)
 │   ├── src/
 │   │   ├── neural/
 │   │   │   ├── __init__.py
@@ -343,8 +505,35 @@ projeto-integrador/
 │   ├── pyproject.toml
 │   ├── poetry.lock
 │   └── pyrightconfig.json
+├── backend/
+│   ├── prisma/
+│   │   ├── migrations/
+│   │   ├── schema.prisma      # Modelo de domínio (unidades, viaturas, ocorrências...)
+│   │   └── seed.ts            # Hierarquia de unidades + primeiro admin
+│   ├── scripts/
+│   │   └── e2e-test.mjs       # Teste de ponta a ponta da stack inteira
+│   ├── tests/
+│   │   ├── mocks/             # Stub do client Prisma gerado, só para o Jest
+│   │   ├── setup-env.cjs      # Env vars exigidas por config/env.ts nos testes
+│   │   └── unit/              # Testes de services, utils e mapeamento de erros
+│   ├── jest.config.cjs
+│   ├── src/
+│   │   ├── @types/            # Augmentação de tipos do Fastify
+│   │   ├── config/            # env validado com zod, client do Prisma
+│   │   ├── controllers/       # Um arquivo por operação: valida e chama o service
+│   │   ├── errors/            # Erros de domínio + mapeamento para status HTTP
+│   │   ├── generated/         # Client do Prisma (no .gitignore)
+│   │   ├── plugins/           # auth (JWT) e realtime (WebSocket)
+│   │   ├── realtime/          # Fan-out dos eventos de despacho
+│   │   ├── routes/            # Registro das rotas por entidade
+│   │   ├── services/          # Regras de negócio, uma classe por operação
+│   │   ├── utils/
+│   │   └── server.ts          # Sobe o Fastify e registra os plugins
+│   ├── package.json
+│   └── tsconfig.json
 ├── frontend/
 ├── .gitignore
+├── CLAUDE.md
 └── README.md
 ```
 
@@ -352,14 +541,30 @@ projeto-integrador/
 
 ## .gitignore
 
-Certifique-se de que as seguintes entradas estão no `.gitignore`:
+Cada parte do projeto tem o seu próprio `.gitignore`. O que **nunca** deve ser
+commitado:
+
+**`machine/.gitignore`**
 
 ```
-machine/models/
-machine/src/cpp/build/
-machine/rota.html
-machine/cache/
+models/          # Modelo treinado: grande e específico de cada máquina
+build/           # Módulo C++ compilado
+cache/           # Cache do OSMnx
+*.html           # rota.html, gerado pelo folium
+.venv/
+__pycache__/
 ```
+
+**`backend/.gitignore`**
+
+```
+node_modules
+.env                    # Contém o JWT_SECRET e a senha do banco
+/src/generated/prisma   # Client do Prisma, refeito por `npx prisma generate`
+```
+
+O `poetry.lock` e o `package-lock.json`, ao contrário, **devem** ser commitados:
+são eles que garantem que todo o time resolva exatamente as mesmas versões.
 
 ---
 
@@ -400,6 +605,8 @@ git push origin feature/nome-da-tarefa
 
 ## Dependências Principais
 
+### IA (`machine/`)
+
 | Biblioteca | Uso |
 |---|---|
 | `torch` / `torchvision` | Rede neural (base do PyTorch) |
@@ -411,3 +618,17 @@ git push origin feature/nome-da-tarefa
 | `geopy` | Geocodificação (endereço para coordenada) |
 | `pybind11` | Integração Python com C++ |
 | `folium` | Geração do mapa HTML interativo com as duas rotas |
+| `fastapi` / `uvicorn` | Serviço HTTP que entrega a IA ao backend |
+
+### Backend (`backend/`)
+
+| Biblioteca | Uso |
+|---|---|
+| `fastify` | Servidor HTTP |
+| `@fastify/jwt` / `@fastify/cookie` | Autenticação por token, no header ou no cookie |
+| `@fastify/websocket` | Canal de eventos em tempo real do despacho |
+| `@fastify/helmet` / `@fastify/cors` / `@fastify/rate-limit` | Proteções de borda |
+| `prisma` / `@prisma/client` | ORM e migrations do PostgreSQL |
+| `zod` | Validação das entradas nos controllers e do `.env` |
+| `bcryptjs` | Hash das senhas |
+| `tsx` | Executa o TypeScript direto, com watch no desenvolvimento |
