@@ -1,10 +1,13 @@
 import { fastify, FastifyError } from "fastify";
 import { fastifyCors } from "@fastify/cors";
 import { fastifyCookie } from "@fastify/cookie";
+import { fastifyHelmet } from "@fastify/helmet";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { env } from "./config/env.js";
 import dotenv from 'dotenv';
 import fastifyRateLimit from "@fastify/rate-limit";
+import { authPlugin } from "./plugins/auth.js";
+import { realtimePlugin } from "./plugins/realtime.js";
 import { routes } from "./routes/index.js";
 
 dotenv.config()
@@ -15,6 +18,10 @@ const HTTP_HOST = env.HOST
 const server = fastify({ logger: true }).withTypeProvider<ZodTypeProvider>()
 
 async function start(): Promise<void> {
+
+  await server.register(fastifyHelmet, {
+    contentSecurityPolicy: false
+  })
 
   await server.register(fastifyRateLimit, {
     global: true,
@@ -29,13 +36,19 @@ async function start(): Promise<void> {
 
   await server.register(fastifyCors, {
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   })
   await server.register(fastifyCookie, {
     parseOptions: {
       httpOnly: true
     }
   })
+
+  // The cookie plugin must be registered before the JWT, which reads the token from it.
+  await server.register(authPlugin)
+
+  // Realtime depends on auth: it verifies the JWT on the WebSocket handshake.
+  await server.register(realtimePlugin, { prefix: "/api/v1" })
 
   await server.register(routes, { prefix: "/api/v1" })
 
