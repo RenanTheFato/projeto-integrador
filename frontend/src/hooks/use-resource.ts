@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { ApiError } from "@/api/client"
+import { translateMessage } from "@/api/messages"
 
 export interface Resource<T> {
   data: T | null
@@ -20,8 +21,8 @@ export interface Resource<T> {
 }
 
 export function messageOf(error: unknown): string {
-  if (error instanceof ApiError) return error.message
-  if (error instanceof Error) return error.message
+  if (error instanceof ApiError) return translateMessage(error.message)
+  if (error instanceof Error) return translateMessage(error.message)
   return "Erro inesperado"
 }
 
