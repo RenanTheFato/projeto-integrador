@@ -12,10 +12,10 @@ import { Plus, ShieldCheck, Users } from "lucide-react"
 
 import { crews, firefighters, units, vehicles } from "@/api/endpoints"
 import { CREW_ROLE_LABEL, RANK_LABEL, optionsOf } from "@/api/labels"
-import type { CrewRole } from "@/api/types"
+import type { Crew, CrewRole } from "@/api/types"
 import {
-  ActionButton, Badge, Cell, Field, Modal, Page, PageHeader, Pagination, Panel,
-  Row, Select, Table, TextInput,
+  ActionButton, Badge, Cell, ConfirmButton, Field, Modal, Page, PageHeader, Pagination,
+  Panel, Row, Select, Table, TextInput,
 } from "@/components/layout/kit"
 import { EmptyState, ErrorBox, ErrorDetails, LoadingBlock } from "@/components/layout/feedback"
 import { useAuth } from "@/auth/auth-context"
@@ -25,6 +25,7 @@ import { formatDateTime, toLocalInputValue } from "@/lib/format"
 export default function Guarnicoes() {
   const { can } = useAuth()
   const mayManage = can(["ADMIN", "COMANDANTE"])
+  const mayDelete = can(["ADMIN"])
 
   const [page, setPage] = useState(1)
   const [onlyActive, setOnlyActive] = useState("true")
@@ -69,34 +70,12 @@ export default function Guarnicoes() {
 
       {list.data && list.data.items.length > 0 && (
         <Panel title="Guarnições" icon={<ShieldCheck className="h-5 w-5" />}>
-          <Table headers={["Guarnição", "Viatura", "Comandante", "Integrantes", "Início", "Situação"]}>
+          <Table headers={[
+            "Guarnição", "Viatura", "Comandante", "Integrantes", "Início", "Situação",
+            ...(mayDelete ? ["Ações"] : []),
+          ]}>
             {list.data.items.map((crew) => (
-              <Row key={crew.id}>
-                <Cell className="font-bold">{crew.name}</Cell>
-                <Cell>{crew.vehicle?.prefix ?? "—"}</Cell>
-                <Cell>
-                  {crew.commander
-                    ? `${RANK_LABEL[crew.commander.rank]} ${crew.commander.war_name}`
-                    : "—"}
-                </Cell>
-                <Cell>
-                  <div className="flex flex-wrap gap-1">
-                    {(crew.members ?? []).map((member) => (
-                      <span key={member.id} className="border border-neutral-300 px-2 py-0.5 text-sm">
-                        {member.firefighter?.war_name ?? "—"}
-                        <span className="text-neutral-500"> · {CREW_ROLE_LABEL[member.role]}</span>
-                      </span>
-                    ))}
-                    {(crew.members ?? []).length === 0 && <span className="text-neutral-500">—</span>}
-                  </div>
-                </Cell>
-                <Cell className="whitespace-nowrap">{formatDateTime(crew.started_at)}</Cell>
-                <Cell>
-                  <Badge tone={crew.active ? "bg-green-600" : "bg-neutral-500"}>
-                    {crew.active ? "Em serviço" : "Encerrada"}
-                  </Badge>
-                </Cell>
-              </Row>
+              <CrewRow key={crew.id} crew={crew} mayDelete={mayDelete} onChanged={list.reload} />
             ))}
           </Table>
 
@@ -111,6 +90,57 @@ export default function Guarnicoes() {
         />
       )}
     </Page>
+  )
+}
+
+function CrewRow({ crew, mayDelete, onChanged }: {
+  crew: Crew
+  mayDelete: boolean
+  onChanged: () => void
+}) {
+  const remove = useMutation(() => crews.remove(crew.id))
+
+  return (
+    <Row>
+      <Cell className="font-bold">{crew.name}</Cell>
+      <Cell>{crew.vehicle?.prefix ?? "—"}</Cell>
+      <Cell>
+        {crew.commander ? `${RANK_LABEL[crew.commander.rank]} ${crew.commander.war_name}` : "—"}
+      </Cell>
+      <Cell>
+        <div className="flex flex-wrap gap-1">
+          {(crew.members ?? []).map((member) => (
+            <span key={member.id} className="border border-neutral-300 px-2 py-0.5 text-sm">
+              {member.firefighter?.war_name ?? "—"}
+              <span className="text-neutral-500"> · {CREW_ROLE_LABEL[member.role]}</span>
+            </span>
+          ))}
+          {(crew.members ?? []).length === 0 && <span className="text-neutral-500">—</span>}
+        </div>
+      </Cell>
+      <Cell className="whitespace-nowrap">{formatDateTime(crew.started_at)}</Cell>
+      <Cell>
+        <Badge tone={crew.active ? "bg-green-600" : "bg-neutral-500"}>
+          {crew.active ? "Em serviço" : "Encerrada"}
+        </Badge>
+      </Cell>
+
+      {mayDelete && (
+        <Cell>
+          <ConfirmButton
+            label="Excluir"
+            confirmLabel="Confirmar"
+            className="px-2.5 py-1 text-sm"
+            disabled={remove.submitting}
+            onConfirm={async () => {
+              const done = await remove.run(undefined)
+              if (done) onChanged()
+            }}
+          />
+          {remove.error && <span className="mt-1 block max-w-xs text-sm text-[#DE5656]">{remove.error}</span>}
+        </Cell>
+      )}
+    </Row>
   )
 }
 

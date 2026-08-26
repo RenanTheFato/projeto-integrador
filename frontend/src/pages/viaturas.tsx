@@ -16,8 +16,8 @@ import {
 } from "@/api/labels"
 import type { Vehicle, VehicleStatus, VehicleType } from "@/api/types"
 import {
-  ActionButton, Badge, Cell, Field, Modal, Page, PageHeader, Pagination, Panel,
-  Row, Select, Table, TextInput,
+  ActionButton, Badge, Cell, ConfirmButton, Field, Modal, Page, PageHeader, Pagination,
+  Panel, Row, Select, Table, TextInput,
 } from "@/components/layout/kit"
 import { EmptyState, ErrorBox, ErrorDetails, LoadingBlock } from "@/components/layout/feedback"
 import { useAuth } from "@/auth/auth-context"
@@ -26,6 +26,7 @@ import { useMutation, useResource } from "@/hooks/use-resource"
 export default function Viaturas() {
   const { can } = useAuth()
   const mayManage = can(["ADMIN", "COMANDANTE"])
+  const mayDelete = can(["ADMIN"])
 
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState("")
@@ -85,9 +86,12 @@ export default function Viaturas() {
 
       {list.data && list.data.items.length > 0 && (
         <Panel title="Frota" icon={<Car className="h-5 w-5" />}>
-          <Table headers={["Prefixo", "Tipo", "Placa", "Modelo", "Ano", "Guarnição", "Unidade", "Situação"]}>
+          <Table headers={[
+            "Prefixo", "Tipo", "Placa", "Modelo", "Ano", "Guarnição", "Unidade", "Situação",
+            ...(mayDelete ? ["Ações"] : []),
+          ]}>
             {list.data.items.map((vehicle) => (
-              <VehicleRow key={vehicle.id} vehicle={vehicle} onChanged={list.reload} />
+              <VehicleRow key={vehicle.id} vehicle={vehicle} mayDelete={mayDelete} onChanged={list.reload} />
             ))}
           </Table>
 
@@ -106,8 +110,13 @@ export default function Viaturas() {
   )
 }
 
-function VehicleRow({ vehicle, onChanged }: { vehicle: Vehicle, onChanged: () => void }) {
+function VehicleRow({ vehicle, mayDelete, onChanged }: {
+  vehicle: Vehicle
+  mayDelete: boolean
+  onChanged: () => void
+}) {
   const update = useMutation((status: VehicleStatus) => vehicles.update(vehicle.id, { status }))
+  const remove = useMutation(() => vehicles.remove(vehicle.id))
 
   // A committed vehicle is released by the dispatch flow, not by hand: letting
   // it be freed here would leave a crew attending an incident with no truck.
@@ -141,6 +150,22 @@ function VehicleRow({ vehicle, onChanged }: { vehicle: Vehicle, onChanged: () =>
         )}
         {update.error && <span className="mt-1 block text-sm text-[#DE5656]">{update.error}</span>}
       </Cell>
+
+      {mayDelete && (
+        <Cell>
+          <ConfirmButton
+            label="Excluir"
+            confirmLabel="Confirmar"
+            className="px-2.5 py-1 text-sm"
+            disabled={remove.submitting || locked}
+            onConfirm={async () => {
+              const done = await remove.run(undefined)
+              if (done) onChanged()
+            }}
+          />
+          {remove.error && <span className="mt-1 block max-w-xs text-sm text-[#DE5656]">{remove.error}</span>}
+        </Cell>
+      )}
     </Row>
   )
 }

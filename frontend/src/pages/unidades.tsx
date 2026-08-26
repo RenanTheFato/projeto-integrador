@@ -15,10 +15,11 @@ import { units } from "@/api/endpoints"
 import { UNIT_TYPE_LABEL, optionsOf } from "@/api/labels"
 import type { Unit, UnitType } from "@/api/types"
 import {
-  ActionButton, Badge, Cell, Field, Modal, Page, PageHeader, Pagination, Panel,
-  Row, Select, Table, TextInput,
+  ActionButton, Badge, Cell, ConfirmButton, Field, Modal, Page, PageHeader, Pagination,
+  Panel, Row, Select, Table, TextInput,
 } from "@/components/layout/kit"
 import { EmptyState, ErrorBox, ErrorDetails, LoadingBlock } from "@/components/layout/feedback"
+import { useAuth } from "@/auth/auth-context"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatCoordinate } from "@/lib/format"
 
@@ -28,6 +29,9 @@ const HIERARCHY: UnitType[] = [
 ]
 
 export default function Unidades() {
+  const { can } = useAuth()
+  const mayDelete = can(["ADMIN"])
+
   const [page, setPage] = useState(1)
   const [type, setType] = useState("")
   const [creating, setCreating] = useState(false)
@@ -71,23 +75,12 @@ export default function Unidades() {
 
       {list.data && list.data.items.length > 0 && (
         <Panel title="Unidades" icon={<Building2 className="h-5 w-5" />}>
-          <Table headers={["Sigla", "Nome", "Nível", "Subordinada a", "Cidade", "Coordenadas", "Situação"]}>
+          <Table headers={[
+            "Sigla", "Nome", "Nível", "Subordinada a", "Cidade", "Coordenadas", "Situação",
+            ...(mayDelete ? ["Ações"] : []),
+          ]}>
             {list.data.items.map((unit) => (
-              <Row key={unit.id}>
-                <Cell className="font-bold">{unit.acronym}</Cell>
-                <Cell>{unit.name}</Cell>
-                <Cell>{UNIT_TYPE_LABEL[unit.type]}</Cell>
-                <Cell>{unit.parent?.acronym ?? "—"}</Cell>
-                <Cell>{unit.city}/{unit.state}</Cell>
-                <Cell className="whitespace-nowrap font-mono text-sm">
-                  {formatCoordinate(unit.latitude)}, {formatCoordinate(unit.longitude)}
-                </Cell>
-                <Cell>
-                  <Badge tone={unit.active ? "bg-green-600" : "bg-neutral-500"}>
-                    {unit.active ? "Ativa" : "Inativa"}
-                  </Badge>
-                </Cell>
-              </Row>
+              <UnitRow key={unit.id} unit={unit} mayDelete={mayDelete} onChanged={list.reload} />
             ))}
           </Table>
 
@@ -103,6 +96,70 @@ export default function Unidades() {
         />
       )}
     </Page>
+  )
+}
+
+function UnitRow({ unit, mayDelete, onChanged }: {
+  unit: Unit
+  mayDelete: boolean
+  onChanged: () => void
+}) {
+  const remove = useMutation(() => units.remove(unit.id))
+  const deactivate = useMutation(() => units.update(unit.id, { active: false }))
+
+  return (
+    <Row>
+      <Cell className="font-bold">{unit.acronym}</Cell>
+      <Cell>{unit.name}</Cell>
+      <Cell>{UNIT_TYPE_LABEL[unit.type]}</Cell>
+      <Cell>{unit.parent?.acronym ?? "—"}</Cell>
+      <Cell>{unit.city}/{unit.state}</Cell>
+      <Cell className="whitespace-nowrap font-mono text-sm">
+        {formatCoordinate(unit.latitude)}, {formatCoordinate(unit.longitude)}
+      </Cell>
+      <Cell>
+        <Badge tone={unit.active ? "bg-green-600" : "bg-neutral-500"}>
+          {unit.active ? "Ativa" : "Inativa"}
+        </Badge>
+      </Cell>
+
+      {mayDelete && (
+        <Cell>
+          <div className="flex flex-wrap gap-1.5">
+            {unit.active && (
+              <ActionButton
+                tone="neutral"
+                className="px-2.5 py-1 text-sm"
+                disabled={deactivate.submitting}
+                onClick={async () => {
+                  const done = await deactivate.run(undefined)
+                  if (done) onChanged()
+                }}
+              >
+                Desativar
+              </ActionButton>
+            )}
+
+            <ConfirmButton
+              label="Excluir"
+              confirmLabel="Confirmar"
+              className="px-2.5 py-1 text-sm"
+              disabled={remove.submitting}
+              onConfirm={async () => {
+                const done = await remove.run(undefined)
+                if (done) onChanged()
+              }}
+            />
+          </div>
+
+          {(remove.error || deactivate.error) && (
+            <span className="mt-1 block max-w-xs text-sm text-[#DE5656]">
+              {remove.error ?? deactivate.error}
+            </span>
+          )}
+        </Cell>
+      )}
+    </Row>
   )
 }
 

@@ -14,10 +14,10 @@ import { firefighters, units } from "@/api/endpoints"
 import {
   FIREFIGHTER_STATUS_LABEL, FIREFIGHTER_STATUS_TONE, RANK_LABEL, optionsOf,
 } from "@/api/labels"
-import type { FirefighterStatus, Rank } from "@/api/types"
+import type { Firefighter, FirefighterStatus, Rank } from "@/api/types"
 import {
-  ActionButton, Badge, Cell, Field, Modal, Page, PageHeader, Pagination, Panel,
-  Row, Select, Table, TextInput,
+  ActionButton, Badge, Cell, ConfirmButton, Field, Modal, Page, PageHeader, Pagination,
+  Panel, Row, Select, Table, TextInput,
 } from "@/components/layout/kit"
 import { EmptyState, ErrorBox, ErrorDetails, LoadingBlock } from "@/components/layout/feedback"
 import { useAuth } from "@/auth/auth-context"
@@ -27,6 +27,7 @@ import { formatDate } from "@/lib/format"
 export default function Efetivo() {
   const { can } = useAuth()
   const mayManage = can(["ADMIN", "COMANDANTE"])
+  const mayDelete = can(["ADMIN"])
 
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState("")
@@ -86,21 +87,17 @@ export default function Efetivo() {
 
       {list.data && list.data.items.length > 0 && (
         <Panel title="Bombeiros" icon={<Users className="h-5 w-5" />}>
-          <Table headers={["Nome de guerra", "Nome completo", "Posto/graduação", "Matrícula", "Unidade", "Admissão", "Situação"]}>
+          <Table headers={[
+            "Nome de guerra", "Nome completo", "Posto/graduação", "Matrícula",
+            "Unidade", "Admissão", "Situação", ...(mayDelete ? ["Ações"] : []),
+          ]}>
             {list.data.items.map((firefighter) => (
-              <Row key={firefighter.id}>
-                <Cell className="font-bold">{firefighter.war_name}</Cell>
-                <Cell>{firefighter.name}</Cell>
-                <Cell>{RANK_LABEL[firefighter.rank]}</Cell>
-                <Cell className="font-mono text-sm">{firefighter.military_id}</Cell>
-                <Cell>{firefighter.unit?.acronym ?? "—"}</Cell>
-                <Cell className="whitespace-nowrap">{formatDate(firefighter.admission_date)}</Cell>
-                <Cell>
-                  <Badge tone={FIREFIGHTER_STATUS_TONE[firefighter.status]}>
-                    {FIREFIGHTER_STATUS_LABEL[firefighter.status]}
-                  </Badge>
-                </Cell>
-              </Row>
+              <FirefighterRow
+                key={firefighter.id}
+                firefighter={firefighter}
+                mayDelete={mayDelete}
+                onChanged={list.reload}
+              />
             ))}
           </Table>
 
@@ -116,6 +113,46 @@ export default function Efetivo() {
         />
       )}
     </Page>
+  )
+}
+
+function FirefighterRow({ firefighter, mayDelete, onChanged }: {
+  firefighter: Firefighter
+  mayDelete: boolean
+  onChanged: () => void
+}) {
+  const remove = useMutation(() => firefighters.remove(firefighter.id))
+
+  return (
+    <Row>
+      <Cell className="font-bold">{firefighter.war_name}</Cell>
+      <Cell>{firefighter.name}</Cell>
+      <Cell>{RANK_LABEL[firefighter.rank]}</Cell>
+      <Cell className="font-mono text-sm">{firefighter.military_id}</Cell>
+      <Cell>{firefighter.unit?.acronym ?? "—"}</Cell>
+      <Cell className="whitespace-nowrap">{formatDate(firefighter.admission_date)}</Cell>
+      <Cell>
+        <Badge tone={FIREFIGHTER_STATUS_TONE[firefighter.status]}>
+          {FIREFIGHTER_STATUS_LABEL[firefighter.status]}
+        </Badge>
+      </Cell>
+
+      {mayDelete && (
+        <Cell>
+          <ConfirmButton
+            label="Excluir"
+            confirmLabel="Confirmar"
+            className="px-2.5 py-1 text-sm"
+            disabled={remove.submitting}
+            onConfirm={async () => {
+              const done = await remove.run(undefined)
+              if (done) onChanged()
+            }}
+          />
+          {remove.error && <span className="mt-1 block max-w-xs text-sm text-[#DE5656]">{remove.error}</span>}
+        </Cell>
+      )}
+    </Row>
   )
 }
 
