@@ -30,6 +30,7 @@ const OPERATIONAL: NavItem[] = [
   { to: "/ocorrencias", label: "Ocorrências" },
   { to: "/despachos", label: "Despachos" },
   { to: "/rotas", label: "Rotas" },
+  { to: "/estatisticas", label: "Estatísticas" },
   { to: "/rede-neural", label: "Rede Neural" },
 ]
 
@@ -81,12 +82,15 @@ export default function Navbar() {
   }
 
   return (
-    <header className="flex h-20 w-full items-center justify-between gap-4 border-b bg-linear-to-r from-red-300 to-orange-300 px-4 lg:px-8">
+    <header className="flex h-16 w-full items-center justify-between gap-3 border-b bg-linear-to-r from-red-300 to-orange-300 px-3 sm:h-20 sm:gap-4 sm:px-4 lg:px-8">
+      {/* The mark used to be 96px tall inside an 80px bar, so it spilled over
+          both edges. It now fits the bar with room to breathe, and shrinks
+          again on a phone. */}
       <Link to="/" className="flex shrink-0 items-center">
-        <img src={zeno} alt="Zeno" className="h-24 w-24 object-contain" />
+        <img src={zeno} alt="Zeno" className="h-12 w-auto object-contain sm:h-16" />
       </Link>
 
-      <nav className="hidden items-center gap-6 xl:flex">
+      <nav className="hidden items-center gap-5 xl:flex 2xl:gap-6">
         {OPERATIONAL.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.to === "/"} className={linkClass}>
             {item.label}
@@ -136,8 +140,8 @@ export default function Navbar() {
         </span>
 
         {user && (
-          <div className="hidden flex-col items-end leading-tight lg:flex">
-            <span className="font-semibold text-neutral-900">{user.email}</span>
+          <div className="hidden max-w-[220px] flex-col items-end leading-tight lg:flex">
+            <span className="w-full truncate text-right font-semibold text-neutral-900">{user.email}</span>
             <span className="text-sm text-neutral-700">{USER_ROLE_LABEL[user.role]}</span>
           </div>
         )}

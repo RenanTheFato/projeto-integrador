@@ -1,0 +1,71 @@
+/*
+ * Tables that survive a phone.
+ *
+ * Every list in this system is a table with six or seven columns, and six
+ * columns do not fit in 360 pixels by any arrangement of font sizes. The usual
+ * answer is a horizontal scrollbar, which on a touch screen is a column of data
+ * nobody discovers.
+ *
+ * So below the `sm` breakpoint the table stops being a table: each row becomes
+ * its own bordered card, and each cell becomes a line with its column name on
+ * the left and its value on the right. The name comes from `data-label`, which
+ * the `Cell` component fills in from the headers its `Table` declared — no
+ * screen has to repeat them.
+ *
+ * Above `sm` none of this applies and the ordinary table comes back.
+ */
+
+@media (max-width: 639px) {
+  .stack-table,
+  .stack-table tbody,
+  .stack-table tr,
+  .stack-table td {
+    display: block;
+    width: 100%;
+  }
+
+  /* The header row is where the column names live, and every cell now carries
+     its own, so the row itself is redundant. */
+  .stack-table thead {
+    display: none;
+  }
+
+  .stack-table tr {
+    border: 1px solid #d4d4d4;
+    background: #fff;
+    margin-bottom: 0.75rem;
+    padding: 0.25rem 0.75rem;
+  }
+
+  .stack-table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 0;
+    border: 0;
+    border-bottom: 1px solid #f5f5f5;
+    text-align: right;
+  }
+
+  .stack-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .stack-table td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #737373;
+  }
+
+  /* A cell with no column name — the actions column — gets the whole width
+     instead of being pushed against a label that is not there. */
+  .stack-table td:not([data-label]) {
+    justify-content: flex-end;
+  }
+}

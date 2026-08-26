@@ -41,15 +41,23 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F5EFE6] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#F5EFE6] px-4 py-8">
       <div className="w-full max-w-md border bg-white shadow-xl">
-        <div className="flex flex-col items-center gap-1 bg-linear-to-r from-red-300 to-orange-300 px-6 py-5">
-          <img src={zeno} alt="Zeno" className="h-24 w-24 object-contain" />
-          <h1 className="text-2xl font-bold text-neutral-900">Central de Despacho</h1>
-          <p className="text-neutral-800">Corpo de Bombeiros — Taubaté</p>
+        <div className="flex flex-col items-center bg-linear-to-r from-red-300 to-orange-300 px-6 pb-5 pt-6">
+          <img src={zeno} alt="Zeno" className="w-56 max-w-[70%] object-contain sm:w-64" />
+
+          {/* Mark, name and corporation are one stack with tight leading, so
+              they read as a single crest instead of three pieces floating at
+              unrelated distances from each other. */}
+          <div className="mt-3 flex flex-col items-center text-center">
+            <h1 className="text-2xl font-bold leading-tight text-neutral-900">Central de Despacho</h1>
+            <p className="text-sm font-semibold uppercase tracking-wide text-neutral-800">
+              Corpo de Bombeiros — Taubaté
+            </p>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-6">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-6 sm:p-8">
           {error && <ErrorBox message={error} />}
 
           <Field label="E-mail" required>

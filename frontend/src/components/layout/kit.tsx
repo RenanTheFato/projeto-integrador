@@ -7,10 +7,12 @@
  * figures a dispatcher reads at a glance.
  */
 
-import { useEffect, useState } from "react"
+import { Children, createContext, useContext, useEffect, useState } from "react"
 import type { ChangeEvent, ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
+
+import "./table.css"
 
 // -- Page scaffolding --------------------------------------------------------
 
@@ -22,7 +24,7 @@ export function PageHeader({ title, subtitle, actions }: {
   return (
     <div className="flex flex-col gap-3 border-b border-neutral-300 pb-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 className="text-3xl font-bold text-neutral-900">{title}</h1>
+        <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">{title}</h1>
         {subtitle && <p className="mt-1 text-neutral-600">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -31,7 +33,7 @@ export function PageHeader({ title, subtitle, actions }: {
 }
 
 export function Page({ children }: { children: ReactNode }) {
-  return <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-6">{children}</div>
+  return <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-3 py-4 sm:gap-5 sm:px-4 sm:py-6">{children}</div>
 }
 
 export function Panel({ title, icon, actions, children, className }: {
@@ -44,15 +46,15 @@ export function Panel({ title, icon, actions, children, className }: {
   return (
     <section className={cn("flex flex-col border bg-white", className)}>
       {(title || actions) && (
-        <header className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3 sm:px-5">
           <div className="flex items-center gap-2">
             {icon}
-            {title && <h2 className="text-xl font-semibold text-neutral-900">{title}</h2>}
+            {title && <h2 className="text-lg font-semibold text-neutral-900 sm:text-xl">{title}</h2>}
           </div>
           {actions}
         </header>
       )}
-      <div className="flex flex-1 flex-col gap-4 p-5">{children}</div>
+      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">{children}</div>
     </section>
   )
 }
@@ -76,12 +78,12 @@ export function StatBox({ icon, label, value, hint, tone = "text-neutral-900" }:
   tone?: string
 }) {
   return (
-    <div className="flex flex-col gap-2 border bg-white px-5 py-4">
+    <div className="flex flex-col gap-2 border bg-white px-4 py-4 sm:px-5">
       <div className="flex items-center gap-2 text-neutral-700">
         {icon}
         <p className="text-lg">{label}</p>
       </div>
-      <p className={cn("text-4xl font-bold", tone)}>{value}</p>
+      <p className={cn("text-3xl font-bold sm:text-4xl", tone)}>{value}</p>
       {hint && <p className="text-sm text-neutral-500">{hint}</p>}
     </div>
   )
@@ -173,6 +175,28 @@ export function Field({ label, hint, required, children }: {
   )
 }
 
+/**
+ * Puts a button on the same line as the inputs beside it.
+ *
+ * A `Field` stacks a label over its control, and optionally a hint under it, so
+ * a bare button in the same row lands a label's height too high with
+ * `items-start` and hangs below the hint with `items-end`. Reserving the same
+ * invisible label gives the button the offset every other column already has,
+ * and the row can then align to the top and stay put however tall the hints
+ * around it get.
+ */
+export function FieldButton({ children, className }: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn("flex flex-col gap-1", className)}>
+      <span aria-hidden className="select-none text-sm font-semibold text-transparent">.</span>
+      {children}
+    </div>
+  )
+}
+
 const CONTROL = "border border-neutral-400 bg-white px-3 py-2 text-neutral-900 outline-none focus:border-[#DE5656]"
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
@@ -206,22 +230,35 @@ export function Select({ options, placeholder, value, onChange, ...props }: {
 
 // -- Tables ------------------------------------------------------------------
 
+/**
+ * The column names, so a cell can carry its own on a narrow screen.
+ *
+ * Below `sm` the table stacks into cards (see `table.css`) and each cell needs
+ * to say which column it is. Passing that down through context rather than
+ * asking every screen to repeat its headers on every cell keeps the eight
+ * tables in this system declaring their headers exactly once.
+ */
+const TableHeaders = createContext<string[]>([])
+const ColumnIndex = createContext(0)
+
 export function Table({ headers, children }: { headers: string[], children: ReactNode }) {
   return (
-    <div className="w-full overflow-x-auto">
-      <table className="w-full min-w-[640px] border-collapse text-left">
-        <thead>
-          <tr className="border-b-2 border-neutral-300">
-            {headers.map((header) => (
-              <th key={header} className="px-3 py-2 text-sm font-bold uppercase tracking-wide text-neutral-600">
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>{children}</tbody>
-      </table>
-    </div>
+    <TableHeaders.Provider value={headers}>
+      <div className="w-full sm:overflow-x-auto">
+        <table className="stack-table w-full border-collapse text-left sm:min-w-[640px]">
+          <thead>
+            <tr className="border-b-2 border-neutral-300">
+              {headers.map((header) => (
+                <th key={header} className="px-3 py-2 text-sm font-bold uppercase tracking-wide text-neutral-600">
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>{children}</tbody>
+        </table>
+      </div>
+    </TableHeaders.Provider>
   )
 }
 
@@ -234,7 +271,9 @@ export function Row({ children, onClick }: { children: ReactNode, onClick?: () =
         onClick && "cursor-pointer hover:bg-[#F5EFE6]",
       )}
     >
-      {children}
+      {Children.map(children, (child, index) => (
+        <ColumnIndex.Provider value={index}>{child}</ColumnIndex.Provider>
+      ))}
     </tr>
   )
 }
@@ -245,7 +284,21 @@ export function Cell({ children, className, title }: {
   /** Native tooltip, for a column that shows an acronym and means a name. */
   title?: string
 }) {
-  return <td title={title} className={cn("px-3 py-2.5 text-neutral-800", className)}>{children}</td>
+  const headers = useContext(TableHeaders)
+  const label = headers[useContext(ColumnIndex)]
+
+  // An actions column has a header nobody needs read back to them.
+  const stackLabel = label && label !== "Ações" ? label : undefined
+
+  return (
+    <td
+      title={title}
+      data-label={stackLabel}
+      className={cn("px-3 py-2.5 text-neutral-800", className)}
+    >
+      {children}
+    </td>
+  )
 }
 
 export function Pagination({ page, perPage, total, onPage }: {
@@ -258,7 +311,7 @@ export function Pagination({ page, perPage, total, onPage }: {
   if (total === 0) return null
 
   return (
-    <div className="flex items-center justify-between gap-3 pt-1">
+    <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
       <p className="text-sm text-neutral-600">
         {total} registro{total === 1 ? "" : "s"} — página {page} de {pages}
       </p>
@@ -287,27 +340,69 @@ export function Pagination({ page, perPage, total, onPage }: {
 
 // -- Modal -------------------------------------------------------------------
 
+/**
+ * A dialog that fits on the screen it is opened on.
+ *
+ * The first version centred the card with `items-center` inside the scrolling
+ * backdrop. That is the classic flexbox trap: a dialog taller than the viewport
+ * has its top half pushed above the scroll origin, where nothing can scroll to
+ * it — which is exactly what happened to the incident form, whose top fields
+ * were unreachable on a laptop without zooming the browser out.
+ *
+ * Two things fix it. `min-h-full` on the row makes the centring safe, because
+ * the row is never shorter than the scroll area. And the card is capped at the
+ * viewport height with only its body scrolling, so the title and the close
+ * button stay put however long the form gets.
+ */
 export function Modal({ title, onClose, children, wide }: {
   title: string
   onClose: () => void
   children: ReactNode
   wide?: boolean
 }) {
+  // Escape closes, and the page behind stops scrolling while it is open —
+  // otherwise a wheel at the edge of the dialog scrolls the list underneath.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose()
+    }
+
+    const previous = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    document.addEventListener("keydown", onKey)
+
+    return () => {
+      document.body.style.overflow = previous
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [onClose])
+
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
-      <div className={cn("w-full border bg-white shadow-xl", wide ? "max-w-4xl" : "max-w-2xl")}>
-        <header className="flex items-center justify-between border-b bg-linear-to-r from-red-300 to-orange-300 px-5 py-3">
-          <h2 className="text-xl font-bold text-neutral-900">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-2 text-2xl leading-none text-neutral-800 hover:text-black"
-            aria-label="Fechar"
-          >
-            ×
-          </button>
-        </header>
-        <div className="p-5">{children}</div>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50">
+      <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+          className={cn(
+            "flex max-h-[calc(100dvh-1.5rem)] w-full flex-col border bg-white shadow-xl sm:max-h-[calc(100dvh-3rem)]",
+            wide ? "max-w-4xl" : "max-w-2xl",
+          )}
+        >
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b bg-linear-to-r from-red-300 to-orange-300 px-4 py-3 sm:px-5">
+            <h2 className="min-w-0 truncate text-lg font-bold text-neutral-900 sm:text-xl">{title}</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 px-2 text-2xl leading-none text-neutral-800 hover:text-black"
+              aria-label="Fechar"
+            >
+              ×
+            </button>
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">{children}</div>
+        </div>
       </div>
     </div>
   )
