@@ -1,0 +1,276 @@
+/**
+ * Every backend endpoint the interface uses, grouped by entity.
+ *
+ * The backend wraps each answer in a named envelope (`{ units, total }`,
+ * `{ occurrence }`), so the unwrapping happens here and the screens deal with
+ * plain domain objects.
+ */
+
+import { api, query } from "./client"
+import type {
+  Crew, CrewRole, Dispatch, DispatchStatus, Firefighter, FirefighterStatus, ModelInfo,
+  Occurrence, OccurrenceNature, OccurrencePriority, OccurrenceStatus, Paginated, Rank,
+  RoutePreview, RouteVariant, Shift, ShiftType, TrainingRun, Unit, UnitType, User,
+  UserRole, Vehicle, VehicleStatus, VehicleType,
+} from "./types"
+
+interface ListParams {
+  page?: number
+  per_page?: number
+  search?: string
+}
+
+function paginate<T>(envelope: Record<string, unknown>, key: string): Paginated<T> {
+  return {
+    items: (envelope[key] as T[]) ?? [],
+    total: (envelope.total as number) ?? 0,
+    page: (envelope.page as number) ?? 1,
+    per_page: (envelope.per_page as number) ?? 20,
+  }
+}
+
+// -- Auth --------------------------------------------------------------------
+
+export const auth = {
+  /**
+   * Answers the token plus the JWT payload — `sub`, not `id`, and none of the
+   * other user fields. Callers that need a user record read `/auth/me`.
+   */
+  login: (email: string, password: string) =>
+    api.post<{ token: string, user: { sub: string, email: string, role: UserRole } }>(
+      "/auth/login", { email, password },
+    ),
+
+  async me(signal?: AbortSignal): Promise<User> {
+    const data = await api.get<{ user: User }>("/auth/me", signal)
+    return data.user
+  },
+
+  async register(input: { email: string, password: string, role: UserRole, firefighter_id?: string }): Promise<User> {
+    const data = await api.post<{ user: User }>("/auth/register", input)
+    return data.user
+  },
+
+  logout: () => api.post<{ message: string }>("/auth/logout"),
+}
+
+// -- Units -------------------------------------------------------------------
+
+export const units = {
+  async list(params: ListParams & { type?: UnitType, parent_id?: string, active?: boolean } = {}): Promise<Paginated<Unit>> {
+    const data = await api.get<Record<string, unknown>>(`/units${query({ ...params, per_page: params.per_page ?? 100 })}`)
+    return paginate<Unit>(data, "units")
+  },
+
+  async get(id: string): Promise<Unit> {
+    const data = await api.get<{ unit: Unit }>(`/units/${id}`)
+    return data.unit
+  },
+
+  async create(input: Record<string, unknown>): Promise<Unit> {
+    const data = await api.post<{ unit: Unit }>("/units", input)
+    return data.unit
+  },
+
+  async update(id: string, input: Record<string, unknown>): Promise<Unit> {
+    const data = await api.patch<{ unit: Unit }>(`/units/${id}`, input)
+    return data.unit
+  },
+
+  remove: (id: string) => api.delete<{ message: string }>(`/units/${id}`),
+}
+
+// -- Firefighters ------------------------------------------------------------
+
+export const firefighters = {
+  async list(params: ListParams & { unit_id?: string, rank?: Rank, status?: FirefighterStatus } = {}): Promise<Paginated<Firefighter>> {
+    const data = await api.get<Record<string, unknown>>(`/firefighters${query({ ...params })}`)
+    return paginate<Firefighter>(data, "firefighters")
+  },
+
+  async get(id: string): Promise<Firefighter> {
+    const data = await api.get<{ firefighter: Firefighter }>(`/firefighters/${id}`)
+    return data.firefighter
+  },
+
+  async create(input: Record<string, unknown>): Promise<Firefighter> {
+    const data = await api.post<{ firefighter: Firefighter }>("/firefighters", input)
+    return data.firefighter
+  },
+
+  async update(id: string, input: Record<string, unknown>): Promise<Firefighter> {
+    const data = await api.patch<{ firefighter: Firefighter }>(`/firefighters/${id}`, input)
+    return data.firefighter
+  },
+
+  remove: (id: string) => api.delete<{ message: string }>(`/firefighters/${id}`),
+}
+
+// -- Vehicles ----------------------------------------------------------------
+
+export const vehicles = {
+  async list(params: ListParams & { unit_id?: string, type?: VehicleType, status?: VehicleStatus } = {}): Promise<Paginated<Vehicle>> {
+    const data = await api.get<Record<string, unknown>>(`/vehicles${query({ ...params })}`)
+    return paginate<Vehicle>(data, "vehicles")
+  },
+
+  async get(id: string): Promise<Vehicle> {
+    const data = await api.get<{ vehicle: Vehicle }>(`/vehicles/${id}`)
+    return data.vehicle
+  },
+
+  async create(input: Record<string, unknown>): Promise<Vehicle> {
+    const data = await api.post<{ vehicle: Vehicle }>("/vehicles", input)
+    return data.vehicle
+  },
+
+  async update(id: string, input: Record<string, unknown>): Promise<Vehicle> {
+    const data = await api.patch<{ vehicle: Vehicle }>(`/vehicles/${id}`, input)
+    return data.vehicle
+  },
+
+  remove: (id: string) => api.delete<{ message: string }>(`/vehicles/${id}`),
+}
+
+// -- Crews -------------------------------------------------------------------
+
+export const crews = {
+  async list(params: ListParams & { unit_id?: string, vehicle_id?: string, active?: boolean } = {}): Promise<Paginated<Crew>> {
+    const data = await api.get<Record<string, unknown>>(`/crews${query({ ...params })}`)
+    return paginate<Crew>(data, "crews")
+  },
+
+  async get(id: string): Promise<Crew> {
+    const data = await api.get<{ crew: Crew }>(`/crews/${id}`)
+    return data.crew
+  },
+
+  async create(input: {
+    name: string, vehicle_id: string, unit_id: string, commander_id: string,
+    started_at: string, members: { firefighter_id: string, role: CrewRole }[],
+  }): Promise<Crew> {
+    const data = await api.post<{ crew: Crew }>("/crews", input)
+    return data.crew
+  },
+
+  async update(id: string, input: Record<string, unknown>): Promise<Crew> {
+    const data = await api.patch<{ crew: Crew }>(`/crews/${id}`, input)
+    return data.crew
+  },
+
+  remove: (id: string) => api.delete<{ message: string }>(`/crews/${id}`),
+}
+
+// -- Shifts ------------------------------------------------------------------
+
+export const shifts = {
+  async list(params: ListParams & { firefighter_id?: string, unit_id?: string, type?: ShiftType, from?: string, to?: string } = {}): Promise<Paginated<Shift>> {
+    const data = await api.get<Record<string, unknown>>(`/shifts${query({ ...params })}`)
+    return paginate<Shift>(data, "shifts")
+  },
+
+  async create(input: Record<string, unknown>): Promise<Shift> {
+    const data = await api.post<{ shift: Shift }>("/shifts", input)
+    return data.shift
+  },
+
+  async update(id: string, input: Record<string, unknown>): Promise<Shift> {
+    const data = await api.patch<{ shift: Shift }>(`/shifts/${id}`, input)
+    return data.shift
+  },
+
+  remove: (id: string) => api.delete<{ message: string }>(`/shifts/${id}`),
+}
+
+// -- Occurrences -------------------------------------------------------------
+
+export const occurrences = {
+  async list(params: ListParams & {
+    unit_id?: string, status?: OccurrenceStatus, nature?: OccurrenceNature,
+    priority?: OccurrencePriority, from?: string, to?: string,
+  } = {}): Promise<Paginated<Occurrence>> {
+    const data = await api.get<Record<string, unknown>>(`/occurrences${query({ ...params })}`)
+    return paginate<Occurrence>(data, "occurrences")
+  },
+
+  async get(id: string): Promise<Occurrence> {
+    const data = await api.get<{ occurrence: Occurrence }>(`/occurrences/${id}`)
+    return data.occurrence
+  },
+
+  async create(input: {
+    nature: OccurrenceNature, priority: OccurrencePriority, description: string,
+    address: string, latitude: number, longitude: number, unit_id: string,
+    caller_name?: string, caller_phone?: string,
+  }): Promise<Occurrence> {
+    const data = await api.post<{ occurrence: Occurrence }>("/occurrences", input)
+    return data.occurrence
+  },
+
+  async update(id: string, input: Record<string, unknown>): Promise<Occurrence> {
+    const data = await api.patch<{ occurrence: Occurrence }>(`/occurrences/${id}`, input)
+    return data.occurrence
+  },
+}
+
+// -- Dispatches --------------------------------------------------------------
+
+export const dispatches = {
+  async list(params: ListParams & {
+    occurrence_id?: string, vehicle_id?: string, status?: DispatchStatus, open?: boolean,
+  } = {}): Promise<Paginated<Dispatch>> {
+    const data = await api.get<Record<string, unknown>>(`/dispatches${query({ ...params })}`)
+    return paginate<Dispatch>(data, "dispatches")
+  },
+
+  async get(id: string): Promise<Dispatch> {
+    const data = await api.get<{ dispatch: Dispatch }>(`/dispatches/${id}`)
+    return data.dispatch
+  },
+
+  /**
+   * Creating a dispatch answers 201 even when the AI is down: `routes` comes
+   * back empty and `message` explains why. Sending a vehicle must never depend
+   * on the model being up, so the caller has to tolerate the empty list.
+   */
+  create: (input: { occurrence_id: string, vehicle_id: string, crew_id?: string }) =>
+    api.post<{ dispatch: Dispatch, routes: RouteVariant[], message?: string }>("/dispatches", input),
+
+  async updateStatus(id: string, status: DispatchStatus): Promise<Dispatch> {
+    const data = await api.patch<{ dispatch: Dispatch }>(`/dispatches/${id}`, { status })
+    return data.dispatch
+  },
+}
+
+// -- AI ----------------------------------------------------------------------
+
+export const ai = {
+  async model(): Promise<ModelInfo> {
+    const data = await api.get<{ model: ModelInfo }>("/ai/model")
+    return data.model
+  },
+
+  /**
+   * Without `dispatch_id` the answer is exploratory: both variants come back
+   * and nothing is written to the database.
+   */
+  calculateRoute: (input: {
+    origin_unit_id?: string, origin_latitude?: number, origin_longitude?: number,
+    destination_latitude: number, destination_longitude: number, dispatch_id?: string,
+  }) => api.post<{ routes: RouteVariant[] | null, neural: RoutePreview, shortest: RoutePreview }>("/ai/routes", input),
+
+  async startTraining(epochs: number): Promise<TrainingRun> {
+    const data = await api.post<{ run: TrainingRun }>("/ai/training", { epochs })
+    return data.run
+  },
+
+  async getTraining(id: string): Promise<TrainingRun> {
+    const data = await api.get<{ run: TrainingRun }>(`/ai/training/${id}`)
+    return data.run
+  },
+
+  async listTrainings(params: ListParams = {}): Promise<Paginated<TrainingRun>> {
+    const data = await api.get<Record<string, unknown>>(`/ai/training${query({ ...params })}`)
+    return paginate<TrainingRun>(data, "runs")
+  },
+}
