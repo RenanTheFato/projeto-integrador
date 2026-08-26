@@ -1,0 +1,70 @@
+.map-wrap { position: relative; overflow: hidden; }
+        .map      { position: absolute; inset: 0; }
+        .maplibregl-ctrl-bottom-left,
+        .maplibregl-ctrl-bottom-right { display: none; }
+
+        .top-controls {
+          position: absolute; top: 16px; left: 50%;
+          transform: translateX(-50%); z-index: 20;
+          display: flex; align-items: center; gap: 8px;
+        }
+
+        .toggle-wrap {
+          display: flex;
+          background: rgba(0,0,0,0.62);
+          border: 1px solid rgba(255,255,255,0.14);
+          border-radius: 10px; padding: 4px; gap: 4px;
+          backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+        }
+        .toggle-wrap button {
+          padding: 8px 24px; border: none; border-radius: 7px;
+          font-family: system-ui, sans-serif; font-size: 13px;
+          font-weight: 600; letter-spacing: .5px; cursor: pointer;
+          transition: background .2s, color .2s;
+          background: transparent; color: rgba(255,255,255,.42);
+          display: flex; align-items: center; gap: 6px; white-space: nowrap;
+        }
+        .toggle-wrap button.active { background: #E53935; color: #fff; }
+        .toggle-wrap button:hover:not(.active) {
+          background: rgba(255,255,255,.09); color: rgba(255,255,255,.82);
+        }
+
+        .cam-dropdown { position: relative; }
+        .cam-trigger {
+          display: flex; align-items: center; gap: 7px;
+          padding: 8px 14px 8px 12px;
+          background: rgba(0,0,0,0.62);
+          border: 1px solid rgba(255,255,255,0.14);
+          border-radius: 10px;
+          backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+          cursor: pointer; transition: border-color .2s, background .2s;
+          white-space: nowrap; font-family: system-ui, sans-serif;
+          font-size: 13px; font-weight: 600;
+          color: rgba(255,255,255,.85); user-select: none;
+        }
+        .cam-trigger:hover { background: rgba(0,0,0,.75); border-color: rgba(255,255,255,.28); }
+        .cam-trigger.open  { border-color: rgba(255,255,255,.35); }
+        .cam-chevron {
+          width: 12px; height: 12px; margin-left: 2px;
+          transition: transform .2s; opacity: .6;
+        }
+        .cam-chevron.open { transform: rotate(180deg); }
+        .cam-menu {
+          position: absolute; top: calc(100% + 6px); left: 50%;
+          transform: translateX(-50%); min-width: 100%;
+          background: rgba(10,10,15,0.92);
+          border: 1px solid rgba(255,255,255,0.13);
+          border-radius: 10px; overflow: hidden;
+          backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+          box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 30;
+        }
+        .cam-option {
+          display: flex; align-items: center; gap: 9px;
+          padding: 10px 16px; cursor: pointer;
+          font-family: system-ui, sans-serif; font-size: 13px; font-weight: 600;
+          color: rgba(255,255,255,.65);
+          transition: background .15s, color .15s; white-space: nowrap;
+        }
+        .cam-option:hover    { background: rgba(255,255,255,.07); color: #fff; }
+        .cam-option.selected { color: #fff; background: rgba(229,57,53,.18); }
+        .cam-option.selected svg { color: #E53935; }
