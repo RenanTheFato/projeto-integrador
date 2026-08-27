@@ -1,11 +1,6 @@
 # Projeto Integrador
 Sistema de identificação de rotas otimizadas para bombeiros usando redes neurais.
 
-> **Este arquivo é o manual de instalação e execução.** Para o retrato do
-> sistema — o que existe hoje, para que cada tela serve e por que foi feito
-> assim — leia [`docs/documentacao.md`](docs/documentacao.md). Para apresentar o
-> projeto, [`docs/guia-de-slides.md`](docs/guia-de-slides.md).
-
 ---
 
 ## O que o sistema faz
