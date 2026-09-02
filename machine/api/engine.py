@@ -18,7 +18,12 @@ MACHINE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, MACHINE_ROOT)
 
 from src.neural.path_network import PathNetwork
-from src.pathfinding.pathfinder import apply_neural_weights, get_city_graph
+from src.pathfinding.pathfinder import (
+    apply_neural_weights,
+    edge_between,
+    get_city_graph,
+    path_geometry,
+)
 
 CITY = "Taubaté, São Paulo, Brasil"
 MODEL_PATH = os.path.join(MACHINE_ROOT, "models", "path_network.pth")
@@ -117,33 +122,33 @@ class RouteEngine:
         self._loaded = False
         self.load()
 
-    def _traverse(self, path: list, weight: str) -> tuple[float, float]:
-        """Sum length and neural cost along a path, edge by edge."""
+    def _variant(self, origin_node, dest_node, weight: str) -> dict:
+        """
+        One route, with its numbers and the line that draws it.
+
+        Distance and geometry are accumulated in the same walk over the path so
+        that they can never disagree: both read from the edge `edge_between`
+        picked, and the drawn line now measures the same as the distance it
+        reports, because it follows the same curves the length was measured
+        along.
+        """
+        path = nx.shortest_path(self._graph, origin_node, dest_node, weight=weight)
+
         distance_m = 0.0
         time_s = 0.0
 
-        for i in range(len(path) - 1):
-            u, v = path[i], path[i + 1]
-            edge = min(
-                self._graph[u][v].values(),
-                key=lambda d: d.get(weight, float("inf")),
-            )
+        for u, v in zip(path, path[1:]):
+            edge = edge_between(self._graph, u, v, weight)
             distance_m += edge.get("length", 0.0)
             time_s += edge.get("neural_cost", 0.0)
-
-        return distance_m, time_s
-
-    def _variant(self, origin_node, dest_node, weight: str) -> dict:
-        path = nx.shortest_path(self._graph, origin_node, dest_node, weight=weight)
-        distance_m, time_s = self._traverse(path, weight)
 
         return {
             "distance_meters": round(distance_m),
             "estimated_time_seconds": round(time_s, 2),
+            # The number of intersections, not of drawn points: it is what the
+            # interface labels "cruzamentos".
             "node_count": len(path),
-            "geometry": [
-                [self._graph.nodes[n]["y"], self._graph.nodes[n]["x"]] for n in path
-            ],
+            "geometry": path_geometry(self._graph, path, weight),
         }
 
     def _snap(self, point: tuple[float, float], label: str):

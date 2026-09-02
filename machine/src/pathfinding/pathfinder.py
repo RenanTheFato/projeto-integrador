@@ -21,6 +21,75 @@ def get_city_graph(city_name: str):
     print(f"  Carregando mapa de {city_name}...")
     return ox.graph_from_place(city_name, network_type="drive")
 
+def edge_between(graph, u, v, weight: str) -> dict:
+    """
+    A aresta que o roteador realmente usa entre dois nos.
+
+    O OSM liga o mesmo par de cruzamentos por mais de uma via com frequencia —
+    uma marginal ao lado da avenida, uma alca de acesso, um viaduto e a rua por
+    baixo dele. `shortest_path` devolve nos, nao arestas, entao a aresta precisa
+    ser escolhida de novo aqui, e pelo mesmo peso com que o caminho foi achado:
+    escolher por outro criterio faria a distancia relatada e a linha desenhada
+    pertencerem a uma rua diferente da que a rota percorre.
+    """
+    return min(
+        graph[u][v].values(),
+        key=lambda d: d.get(weight, float("inf")),
+    )
+
+def edge_shape(graph, u, v, edge: dict) -> list[list[float]]:
+    """
+    O traçado real de uma rua, de `u` para `v`, como pares [latitude, longitude].
+
+    E o que separa uma rota que segue a rua de uma que corta o quarteirao. O
+    OSMnx simplifica o grafo antes de entrega-lo: uma rua curva sem nenhum
+    entroncamento ao longo dela vira uma *unica* aresta entre os dois
+    cruzamentos das pontas, e cada curva no meio sai do conjunto de nos e fica
+    guardada no atributo `geometry` da aresta. Ligar os nos do caminho com
+    segmentos retos desenha, portanto, a corda de cada curva — visivelmente fora
+    da rua em qualquer zoom util para despachar. So as arestas que realmente sao
+    retas nao tem o atributo, e para essas as duas pontas ja sao o traçado
+    inteiro.
+    """
+    line = edge.get("geometry")
+
+    if line is None:
+        return [
+            [graph.nodes[u]["y"], graph.nodes[u]["x"]],
+            [graph.nodes[v]["y"], graph.nodes[v]["x"]],
+        ]
+
+    # O shapely guarda (x, y); o consumidor quer [latitude, longitude].
+    shape = [[latitude, longitude] for longitude, latitude in line.coords]
+
+    # A linha guardada segue o sentido em que a via foi digitalizada no OSM, que
+    # nao e necessariamente o sentido em que esta aresta e percorrida. Comparar
+    # a primeira ponta com `u` nao custa nada e evita que uma mao unica invertida
+    # desenhe a rota de tras para frente por cima de si mesma.
+    start = [graph.nodes[u]["y"], graph.nodes[u]["x"]]
+    near_first = (start[0] - shape[0][0]) ** 2 + (start[1] - shape[0][1]) ** 2
+    near_last = (start[0] - shape[-1][0]) ** 2 + (start[1] - shape[-1][1]) ** 2
+
+    if near_first > near_last:
+        shape.reverse()
+
+    return shape
+
+def path_geometry(graph, path: list, weight: str) -> list[list[float]]:
+    """Costura o traçado de cada rua do caminho numa polilinha so."""
+    if not path:
+        return []
+
+    geometry = [[graph.nodes[path[0]]["y"], graph.nodes[path[0]]["x"]]]
+
+    for u, v in zip(path, path[1:]):
+        edge = edge_between(graph, u, v, weight)
+        # O primeiro ponto de cada rua e o ultimo da anterior, entao ele sai
+        # para a linha nao ficar com pontos repetidos.
+        geometry.extend(edge_shape(graph, u, v, edge)[1:])
+
+    return geometry
+
 def _build_inference_tensors(graph):
     """
     Mesma lógica de remapeamento do train.py, sem calcular labels.

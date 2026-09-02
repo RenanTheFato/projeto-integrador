@@ -8,12 +8,7 @@ import folium
 import osmnx as ox
 import networkx as nx
 
-def _get_path_coords(graph, path: list) -> list[tuple]:
-    coords = []
-    for node in path:
-        data = graph.nodes[node]
-        coords.append((data["y"], data["x"]))
-    return coords
+from .pathfinder import path_geometry
 
 def _calc_path_stats(graph, path: list) -> dict:
     total_distance_m = 0.0
@@ -104,7 +99,7 @@ def generate_map(
     )
 
     # Rota por distância — vermelha, embaixo
-    distance_coords = _get_path_coords(graph, distance_path)
+    distance_coords = path_geometry(graph, distance_path, "length")
     folium.PolyLine(
         distance_coords,
         color="#e74c3c",
@@ -114,7 +109,7 @@ def generate_map(
     ).add_to(m)
 
     # Rota neural — azul, em cima
-    fast_coords = _get_path_coords(graph, fast_path)
+    fast_coords = path_geometry(graph, fast_path, "neural_cost")
     folium.PolyLine(
         fast_coords,
         color="#2980b9",
