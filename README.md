@@ -330,12 +330,10 @@ O PostgreSQL precisa estar rodando. No Windows o cluster fica em `C:\pgsql-data`
 cd backend/
 npx prisma migrate deploy   # aplica as migrations
 npx prisma generate         # regenera o client do Prisma
-npx prisma db seed          # hierarquia de unidades + primeiro admin
+npx prisma db seed          # hierarquia de unidades
 ```
 
-O seed cria o usuário `admin@bombeiros.local` com a senha `admin12345`, e a
-cadeia de unidades `CCB > CBI-1 > 11GB > PB-TAUBATE`. **Troque essa senha antes
-de qualquer uso real.**
+O seed cria a cadeia de unidades `CCB > CBI-1 > 11GB > PB-TAUBATE`.
 
 ### 2. Serviço de IA (FastAPI, porta 8000)
 
@@ -396,8 +394,12 @@ A interface sobe em `http://localhost:5173` e fala **só** com o backend — ela
 nunca chama a porta 8000 diretamente. O endereço da API vem de `VITE_API_URL` e
 cai em `http://127.0.0.1:3333/api/v1` quando a variável não existe.
 
-O login de demonstração é o admin criado pelo seed:
-`admin@bombeiros.local` / `admin12345`.
+**Não há login.** A interface abre direto no painel operacional. O sistema é um
+console de emergência: quem atende o 193 está com alguém na linha, e uma tela de
+autenticação entre o operador e o formulário de ocorrência custa segundos que
+pertencem à chamada. A API também é aberta — o controle de acesso, num uso real,
+seria feito pela rede em que o console roda, não por uma senha digitada durante
+um incêndio.
 
 > No Windows, `npm run dev` do backend usa `tsx --watch`, que reage a cada
 > evento de arquivo. Com o projeto dentro do OneDrive a sincronização dispara
@@ -411,7 +413,7 @@ cd backend/
 npm run seed:occurrences
 ```
 
-O `backend/prisma/seed.ts` cria a hierarquia de unidades e o primeiro admin. Já
+O `backend/prisma/seed.ts` cria a hierarquia de unidades. Já
 o `backend/scripts/seed-occurrences.ts` escreve **370 ocorrências ao longo de
 doze meses**, com bairros de peso diferente, sazonalidade, perfis de horário por
 natureza e endereços recorrentes — é o que faz a tela de estatísticas ter o que
@@ -423,12 +425,11 @@ rotas calculadas para eles.
 
 ### Principais rotas da API
 
-Todas exigem autenticação via JWT, aceito no header `Authorization: Bearer` ou
-no cookie httpOnly `token`. Os papéis são `ADMIN`, `COMANDANTE` e `OPERADOR`.
+Nenhuma exige autenticação: o console é aberto por decisão de projeto (veja a
+seção do frontend acima).
 
 | Recurso | O que é |
 |---------|----------|
-| `POST /auth/login`, `POST /auth/register` | Autenticação |
 | `/units` | Unidades da corporação (hierarquia autorrelacionada) |
 | `/firefighters` | Efetivo |
 | `/vehicles` | Viaturas |
@@ -440,9 +441,8 @@ no cookie httpOnly `token`. Os papéis são `ADMIN`, `COMANDANTE` e `OPERADOR`.
 | `GET /realtime` | WebSocket com os eventos do despacho |
 
 O WebSocket transmite `occurrence.created`, `occurrence.updated`,
-`dispatch.created`, `dispatch.updated` e `vehicle.moved`. Como o navegador não
-consegue mandar header no handshake, o token vai na query string:
-`ws://localhost:3333/api/v1/realtime?token=<jwt>`.
+`dispatch.created`, `dispatch.updated` e `vehicle.moved`. Basta abrir
+`ws://localhost:3333/api/v1/realtime` — não há handshake de autenticação.
 
 ### Ciclo de vida de um despacho
 
@@ -472,8 +472,8 @@ npm run test:e2e
 ```
 
 O script `backend/scripts/e2e-test.mjs` exercita a API como um cliente real —
-login, todos os CRUDs, o ciclo do despacho, o WebSocket e a ponte com a IA, sem
-nenhum stub. São 57 verificações; passar todas significa que Node, Postgres e o
+todos os CRUDs, o ciclo do despacho, o WebSocket e a ponte com a IA, sem
+nenhum stub. Passar todas significa que Node, Postgres e o
 serviço Python estão realmente conversando entre si.
 
 ### Testes unitários
@@ -546,7 +546,7 @@ projeto-integrador/
 │   ├── prisma/
 │   │   ├── migrations/
 │   │   ├── schema.prisma      # Modelo de domínio (unidades, viaturas, ocorrências...)
-│   │   └── seed.ts            # Hierarquia de unidades + primeiro admin
+│   │   └── seed.ts            # Hierarquia de unidades
 │   ├── scripts/
 │   │   └── e2e-test.mjs       # Teste de ponta a ponta da stack inteira
 │   ├── tests/
@@ -560,7 +560,7 @@ projeto-integrador/
 │   │   ├── controllers/       # Um arquivo por operação: valida e chama o service
 │   │   ├── errors/            # Erros de domínio + mapeamento para status HTTP
 │   │   ├── generated/         # Client do Prisma (no .gitignore)
-│   │   ├── plugins/           # auth (JWT) e realtime (WebSocket)
+│   │   ├── plugins/           # realtime (WebSocket)
 │   │   ├── realtime/          # Fan-out dos eventos de despacho
 │   │   ├── routes/            # Registro das rotas por entidade
 │   │   ├── services/          # Regras de negócio, uma classe por operação
@@ -571,7 +571,6 @@ projeto-integrador/
 ├── frontend/
 │   ├── src/
 │   │   ├── api/               # Cliente HTTP, endpoints, tipos e tradução de mensagens
-│   │   ├── auth/              # Contexto de sessão e guardas de rota
 │   │   ├── components/
 │   │   │   ├── charts/        # Gráficos em SVG: treinamento e distribuições
 │   │   │   ├── layout/        # Kit visual: painéis, tabelas, campos, modal
@@ -580,16 +579,12 @@ projeto-integrador/
 │   │   ├── hooks/             # useResource, useMutation, useRealtime, useMeasure
 │   │   ├── lib/               # Formatação, distância geodésica, utilidades
 │   │   ├── pages/             # Uma tela por arquivo
-│   │   ├── App.tsx            # Rotas e guardas
+│   │   ├── App.tsx            # Rotas
 │   │   └── main.tsx
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.ts
-├── docs/
-│   ├── documentacao.md        # O sistema explicado para quem não o escreveu
-│   └── guia-de-slides.md      # Roteiro de apresentação
 ├── .gitignore
-├── CLAUDE.md
 └── README.md
 ```
 
@@ -615,7 +610,7 @@ __pycache__/
 
 ```
 node_modules
-.env                    # Contém o JWT_SECRET e a senha do banco
+.env                    # Contém a senha do banco
 /src/generated/prisma   # Client do Prisma, refeito por `npx prisma generate`
 ```
 
@@ -681,10 +676,8 @@ git push origin feature/nome-da-tarefa
 | Biblioteca | Uso |
 |---|---|
 | `fastify` | Servidor HTTP |
-| `@fastify/jwt` / `@fastify/cookie` | Autenticação por token, no header ou no cookie |
 | `@fastify/websocket` | Canal de eventos em tempo real do despacho |
 | `@fastify/helmet` / `@fastify/cors` / `@fastify/rate-limit` | Proteções de borda |
 | `prisma` / `@prisma/client` | ORM e migrations do PostgreSQL |
 | `zod` | Validação das entradas nos controllers e do `.env` |
-| `bcryptjs` | Hash das senhas |
 | `tsx` | Executa o TypeScript direto, com watch no desenvolvimento |

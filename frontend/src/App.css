@@ -2,3 +2,129 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+
+/*
+ * The palette of the dispatch console.
+ *
+ * The first version dressed the system in the corporation's own colours: a
+ * cream page under a red-to-orange gradient bar, coral links, amber warnings
+ * and a saturated hue for every status. It looked like the fire department's
+ * letterhead rather than the equipment it runs on, and — worse for a screen
+ * read under pressure — colour was everywhere, so colour meant nothing.
+ *
+ * What replaces it is the language of instrumentation: a graphite chrome, a
+ * cool grey workspace, white panels, and a single steel blue for anything the
+ * operator can act on. Red is not the corporation's colour here, it is the
+ * severity channel — it appears only on a critical incident, a committed
+ * vehicle or a failure, which is exactly when the eye should be pulled to it.
+ *
+ * Five hues carry meaning and nothing else does:
+ *   accent  steel blue  — actions, links, live data, the neural route
+ *   alert   deep red    — critical severity, failures, engaged vehicles
+ *   warn    ochre       — something needs attention but is not an emergency
+ *   ok      deep green  — available, closed, healthy
+ *   info    teal        — a step in progress that is neither good nor bad
+ */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+
+  /* The neutrals are cooled from grey to slate, so the greys of the interface
+     sit in the same temperature as the accent instead of muddying it. Every
+     `neutral-*` class in the codebase reads from here. */
+  --color-neutral-50: #f8fafc;
+  --color-neutral-100: #f1f5f9;
+  --color-neutral-200: #e4e9ef;
+  --color-neutral-300: #cbd5e1;
+  --color-neutral-400: #94a3b8;
+  --color-neutral-500: #64748b;
+  --color-neutral-600: #4a5768;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1e293b;
+  --color-neutral-900: #0f172a;
+  --color-neutral-950: #060d18;
+
+  /* Chrome — the dark bar the whole console hangs from. */
+  --color-chrome: #0F1720;
+  --color-chrome-soft: #1A2634;
+  --color-chrome-line: #2A3847;
+  --color-chrome-ink: #E8EEF4;
+  --color-chrome-muted: #93A5B7;
+
+  /* Surfaces */
+  --color-canvas: #EDF1F5;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #F3F6F9;
+
+  /* Structure */
+  --color-line: #D6DEE6;
+  --color-line-strong: #B2BECB;
+
+  /* Text */
+  --color-ink: #0F1922;
+  --color-ink-muted: #55636F;
+  --color-ink-soft: #8496A5;
+
+  /* The one decorative colour: everything actionable. */
+  --color-accent: #0B63A5;
+  --color-accent-strong: #084D80;
+  --color-accent-soft: #E6EFF6;
+
+  /* Severity and state. */
+  --color-alert: #A32A20;
+  --color-alert-strong: #7C1D16;
+  --color-alert-soft: #FAEDEB;
+  --color-warn: #8E600A;
+  --color-warn-soft: #FAF1DF;
+  --color-ok: #2F6A52;
+  --color-ok-soft: #E9F2EE;
+  --color-info: #0E6E75;
+  --color-info-soft: #E4F1F2;
+  --color-mute: #64748B;
+  --color-mute-soft: #EEF1F5;
+}
+
+@layer base {
+  /*
+   * Tailwind v4 draws an unspecified border in `currentColor`, which made every
+   * panel in this system wear a near-black outline. A hairline in the structure
+   * colour is what separates a panel from a box.
+   */
+  *,
+  ::after,
+  ::before {
+    border-color: var(--color-line);
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Figures are read in columns — the times on the incident list, the counters
+     on the panel — and a proportional digit makes those columns wobble. */
+  th,
+  td,
+  time {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-accent);
+    color: #fff;
+  }
+}
+
+/* The label above a figure or beside a status: small, spaced, upper case. The
+   typographic convention of instrument panels, and it costs no colour. */
+@utility label-caps {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

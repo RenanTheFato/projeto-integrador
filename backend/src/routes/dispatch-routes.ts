@@ -7,19 +7,19 @@ import { UpdateDispatchController } from "../controllers/dispatch/update-dispatc
 
 export async function dispatchRoutes(fastify: FastifyTypedInstance, plugins: FastifyPluginOptions) {
 
-  fastify.get("/", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new ListDispatchesController().handle(req, rep)
   })
 
-  fastify.get("/:id", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new GetDispatchController().handle(req, rep)
   })
 
-  fastify.post("/", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.post("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new CreateDispatchController().handle(req, rep)
   })
 
-  fastify.patch("/:id", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.patch("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new UpdateDispatchController().handle(req, rep)
   })
 }

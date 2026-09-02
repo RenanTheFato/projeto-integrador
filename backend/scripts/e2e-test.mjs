@@ -1,10 +1,10 @@
 /**
  * End-to-end smoke test for the whole stack.
  *
- * It drives the public HTTP API exactly as a client would: authentication,
- * every CRUD, the dispatch lifecycle, the realtime socket and the AI bridge.
- * Nothing is stubbed, so a green run proves Node, Postgres and the Python
- * routing service are all talking to each other.
+ * It drives the public HTTP API exactly as a client would: every CRUD, the
+ * dispatch lifecycle, the realtime socket and the AI bridge. Nothing is
+ * stubbed, so a green run proves Node, Postgres and the Python routing service
+ * are all talking to each other.
  *
  * Prerequisites:
  *   1. Postgres up, with `npx prisma migrate deploy` and `npx prisma db seed`
@@ -22,7 +22,6 @@ const WS = "ws://127.0.0.1:3333/api/v1/realtime"
 
 let passed = 0
 let failed = 0
-let token = null
 
 const stamp = Date.now().toString().slice(-8)
 
@@ -54,10 +53,8 @@ const makeCpf = (seed) => {
   return [...base, first, second].join("")
 }
 
-async function call(method, path, body, overrideToken) {
+async function call(method, path, body) {
   const headers = {}
-  const bearer = overrideToken ?? token
-  if (bearer) headers["Authorization"] = `Bearer ${bearer}`
   if (body) headers["Content-Type"] = "application/json"
 
   const res = await fetch(`${BASE}${path}`, {
@@ -73,8 +70,8 @@ async function call(method, path, body, overrideToken) {
 }
 
 /// Every case declares the status it expects; any divergence fails the run.
-async function check(label, expectedStatus, method, path, body, overrideToken) {
-  const { status, payload } = await call(method, path, body, overrideToken)
+async function check(label, expectedStatus, method, path, body) {
+  const { status, payload } = await call(method, path, body)
   const ok = status === expectedStatus
 
   if (ok) { passed++ } else { failed++ }
@@ -95,9 +92,9 @@ function assert(label, condition, detail) {
 
 /// Collects realtime events so the dispatch flow can be checked from the
 /// console's point of view, not only from the HTTP responses.
-function openSocket(jwt) {
+function openSocket() {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`${WS}?token=${jwt}`)
+    const socket = new WebSocket(WS)
     const events = []
 
     socket.addEventListener("message", (e) => {
@@ -115,12 +112,7 @@ function openSocket(jwt) {
 const waitFor = (ms) => new Promise((r) => setTimeout(r, ms))
 
 async function main() {
-  console.log("=== authentication ===")
-  await check("login with wrong password", 401, "POST", "/auth/login", { email: "admin@bombeiros.local", password: "nope" })
-  const login = await check("login as admin", 200, "POST", "/auth/login", { email: "admin@bombeiros.local", password: "admin12345" })
-  token = login.token
-
-  console.log("\n=== units ===")
+  console.log("=== units ===")
   const unitList = await check("list units", 200, "GET", "/units?page=1&per_page=50")
   const taubate = unitList.units.find((u) => u.acronym === "PB-TAUBATE")
   assert("PB-TAUBATE present in the seed", !!taubate)
@@ -205,7 +197,7 @@ async function main() {
   console.log("\n=== realtime ===")
   let stream = null
   try {
-    stream = await openSocket(token)
+    stream = await openSocket()
     assert("WebSocket handshake accepted", true)
     await waitFor(200)
     assert("connected frame received", stream.events.some((e) => e.type === "connected"),
@@ -329,31 +321,22 @@ async function main() {
 
   await check("list training runs", 200, "GET", "/ai/training?page=1&per_page=5")
 
-  console.log("\n=== permissions ===")
-  const operatorEmail = `op-${stamp}@bombeiros.local`
-  await check("register an operator", 201, "POST", "/auth/register", {
-    email: operatorEmail, password: "operador123", role: "OPERADOR"
-  })
-
-  const operatorLogin = await check("login as the operator", 200, "POST", "/auth/login", {
-    email: operatorEmail, password: "operador123"
-  })
-  const operatorToken = operatorLogin.token
-
-  await check("operator creating a vehicle", 403, "POST", "/vehicles", {
+  console.log("\n=== open console ===")
+  // There is no login: every screen of the console talks to the API straight
+  // away, so the smoke test proves the same calls answer without a session.
+  await check("administrative vehicle without a session", 201, "POST", "/vehicles", {
     prefix: `AV-${stamp}`, type: "AV", plate: makePlate(3), model: "Fiat Toro",
     year: 2023, crew_capacity: 2, unit_id: taubate.id
-  }, operatorToken)
+  })
 
-  await check("operator opening an occurrence", 201, "POST", "/occurrences", {
+  await check("occurrence without a session", 201, "POST", "/occurrences", {
     nature: "CAPTURA_ANIMAL", priority: "BAIXA",
     description: "Enxame de abelhas em escola municipal do centro",
     address: "Avenida Tiradentes, Taubate",
     latitude: -23.0290, longitude: -45.5560, unit_id: taubate.id
-  }, operatorToken)
+  })
 
-  await check("operator starting a training run", 403, "POST", "/ai/training", { epochs: 50 }, operatorToken)
-  await check("unauthenticated request", 401, "GET", "/dispatches", undefined, "invalid.token.here")
+  await check("dispatch listing without a session", 200, "GET", "/dispatches")
 
   console.log(`\n${passed} passed, ${failed} failed`)
   process.exit(failed > 0 ? 1 : 0)

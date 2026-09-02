@@ -1,5 +1,4 @@
 import { WebSocket } from "@fastify/websocket";
-import { UserRole } from "../generated/prisma/client.js";
 
 /// Events the dispatch console reacts to. Keeping them in one union means a
 /// new event type cannot be published without being declared here first.
@@ -11,9 +10,7 @@ export type RealtimeEvent =
   | { type: "vehicle.moved", payload: { id: string, prefix: string, latitude: string, longitude: string } }
 
 interface Subscriber {
-  socket: WebSocket,
-  user_id: string,
-  role: UserRole
+  socket: WebSocket
 }
 
 /// In-memory fan-out. Fine for a single Node process, which is what this

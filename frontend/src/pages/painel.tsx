@@ -14,7 +14,7 @@ import { Link } from "react-router-dom"
 import { ai, dispatches, firefighters, occurrences, vehicles } from "@/api/endpoints"
 import {
   NATURE_LABEL, OCCURRENCE_STATUS_LABEL, OCCURRENCE_STATUS_TONE,
-  PRIORITY_LABEL, PRIORITY_TEXT_TONE, PRIORITY_TONE,
+  PRIORITY_LABEL, PRIORITY_TEXT_TONE, PRIORITY_TONE, TONE,
 } from "@/api/labels"
 import type { Occurrence } from "@/api/types"
 import { Badge, Page, PageHeader, Panel, StatBox } from "@/components/layout/kit"
@@ -87,41 +87,41 @@ export default function Painel() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="flex flex-col gap-2 border bg-white px-4 py-4 sm:px-5">
-          <div className="flex items-center gap-2 text-neutral-700">
-            <TriangleAlert className="h-7 w-7" />
-            <p className="text-lg">Ocorrências em aberto</p>
+        <div className="flex flex-col gap-1.5 rounded-sm border border-line bg-surface px-4 py-4 sm:px-5">
+          <div className="flex items-center gap-2 text-ink-muted">
+            <TriangleAlert className="h-5 w-5" />
+            <p className="label-caps">Ocorrências em aberto</p>
           </div>
 
           <div className="flex items-end justify-around pt-1">
-            <Figure value={severe} label="Graves" tone="text-red-600" hint="Prioridade alta ou crítica" />
-            <Figure value={medium} label="Médias" tone="text-orange-600" hint="Prioridade média" />
-            <Figure value={light} label="Leves" tone="text-green-600" hint="Prioridade baixa" />
+            <Figure value={severe} label="Graves" tone="text-alert" hint="Prioridade alta ou crítica" />
+            <Figure value={medium} label="Médias" tone="text-warn" hint="Prioridade média" />
+            <Figure value={light} label="Leves" tone="text-ok" hint="Prioridade baixa" />
           </div>
 
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-ink-soft">
             Aguardando, despachadas ou em atendimento
           </p>
         </div>
 
         <StatBox
-          icon={<Car className="h-7 w-7" />}
+          icon={<Car className="h-5 w-5" />}
           label="Viaturas disponíveis"
           value={fleet.loading ? "—" : available}
           hint={`${committed} empenhada${committed === 1 ? "" : "s"} de ${fleet.data?.total ?? 0} no total`}
-          tone="text-green-700"
+          tone="text-ok"
         />
 
         <StatBox
-          icon={<Activity className="h-7 w-7" />}
+          icon={<Activity className="h-5 w-5" />}
           label="Despachos em andamento"
           value={openDispatches.loading ? "—" : (openDispatches.data?.total ?? 0)}
           hint={`${inProgress.data?.total ?? 0} ocorrência(s) em atendimento`}
-          tone="text-sky-700"
+          tone="text-accent"
         />
 
         <StatBox
-          icon={<Users className="h-7 w-7" />}
+          icon={<Users className="h-5 w-5" />}
           label="Efetivo ativo"
           value={crewOnDuty.loading ? "—" : (crewOnDuty.data?.total ?? 0)}
           hint="Bombeiros com situação ATIVO"
@@ -132,7 +132,7 @@ export default function Painel() {
         <Panel
           title="Últimas ocorrências"
           icon={<Clock className="h-5 w-5" />}
-          actions={<Link to="/ocorrencias" className="font-semibold text-[#DE5656] hover:underline">Ver todas</Link>}
+          actions={<Link to="/ocorrencias" className="font-semibold text-accent hover:underline">Ver todas</Link>}
         >
           {recent.loading && !recent.data && <LoadingBlock />}
           {recent.error && <ErrorBox message={recent.error} onRetry={recent.reload} />}
@@ -163,9 +163,9 @@ export default function Painel() {
             )}
 
             {model.data && (
-              <dl className="flex flex-col gap-2 text-neutral-800">
+              <dl className="flex flex-col gap-2 text-ink">
                 <Line term="Situação" value={
-                  <Badge tone={model.data.loaded ? "bg-green-600" : "bg-[#DE5656]"}>
+                  <Badge tone={model.data.loaded ? TONE.ok : TONE.alert}>
                     {model.data.loaded ? "Modelo carregado" : "Sem modelo"}
                   </Badge>
                 } />
@@ -175,7 +175,7 @@ export default function Painel() {
               </dl>
             )}
 
-            <Link to="/rede-neural" className="font-semibold text-[#DE5656] hover:underline">
+            <Link to="/rede-neural" className="font-semibold text-accent hover:underline">
               Abrir a rede neural
             </Link>
           </Panel>
@@ -198,7 +198,7 @@ function Figure({ value, label, tone, hint }: {
 }) {
   return (
     <div className="flex flex-col items-center" title={hint}>
-      <p className={`text-3xl font-bold sm:text-4xl ${tone}`}>{value}</p>
+      <p className={`text-3xl font-semibold sm:text-4xl ${tone}`}>{value}</p>
       <p className={`text-base font-semibold sm:text-lg ${tone}`}>{label}</p>
     </div>
   )
@@ -206,8 +206,8 @@ function Figure({ value, label, tone, hint }: {
 
 function Line({ term, value }: { term: string, value: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-neutral-100 pb-1.5">
-      <dt className="text-neutral-600">{term}</dt>
+    <div className="flex items-center justify-between gap-3 border-b border-line pb-1.5">
+      <dt className="text-ink-muted">{term}</dt>
       <dd className="text-right font-semibold">{value}</dd>
     </div>
   )
@@ -217,27 +217,30 @@ function OccurrenceRow({ occurrence }: { occurrence: Occurrence }) {
   return (
     <Link
       to={`/ocorrencias/${occurrence.id}`}
-      className="flex items-center gap-4 border-b border-neutral-200 px-1 py-3 last:border-b-0 hover:bg-[#F5EFE6]"
+      className="flex items-center gap-3 border-b border-line py-2.5 pl-0 pr-1 last:border-b-0 hover:bg-accent-soft"
     >
-      <div className={`flex h-14 w-14 shrink-0 items-center justify-center ${PRIORITY_TONE[occurrence.priority]}`}>
-        <OccurrenceAvatar nature={occurrence.nature} size="sm" />
-      </div>
+      <span aria-hidden className={`h-11 w-1 shrink-0 ${PRIORITY_TONE[occurrence.priority]}`} />
+      <OccurrenceAvatar
+        nature={occurrence.nature}
+        size="sm"
+        tone={PRIORITY_TEXT_TONE[occurrence.priority]}
+      />
 
       <div className="min-w-0 flex-1">
-        <p className="truncate font-bold text-neutral-900">{NATURE_LABEL[occurrence.nature]}</p>
-        <p className="truncate text-sm text-neutral-600">{occurrence.address}</p>
+        <p className="truncate font-semibold text-ink">{NATURE_LABEL[occurrence.nature]}</p>
+        <p className="truncate text-sm text-ink-muted">{occurrence.address}</p>
       </div>
 
-      <div className="hidden flex-col items-end sm:flex">
+      <div className="hidden flex-col items-end gap-1 sm:flex">
         <Badge tone={OCCURRENCE_STATUS_TONE[occurrence.status]}>
           {OCCURRENCE_STATUS_LABEL[occurrence.status]}
         </Badge>
-        <span className={`mt-1 text-sm font-semibold ${PRIORITY_TEXT_TONE[occurrence.priority]}`}>
+        <span className={`label-caps ${PRIORITY_TEXT_TONE[occurrence.priority]}`}>
           {PRIORITY_LABEL[occurrence.priority]}
         </span>
       </div>
 
-      <div className="hidden w-32 flex-col items-end text-sm text-neutral-600 md:flex">
+      <div className="hidden w-32 flex-col items-end text-sm text-ink-muted md:flex">
         <span>{formatShort(occurrence.opened_at)}</span>
         <span>{formatElapsed(occurrence.opened_at)}</span>
       </div>
@@ -263,19 +266,19 @@ function LiveFeed() {
   })
 
   if (!connected) {
-    return <p className="text-neutral-600">Sem conexão com o canal de tempo real.</p>
+    return <p className="text-ink-muted">Sem conexão com o canal de tempo real.</p>
   }
 
   if (events.length === 0) {
-    return <p className="text-neutral-600">Conectado. Aguardando eventos do plantão.</p>
+    return <p className="text-ink-muted">Conectado. Aguardando eventos do plantão.</p>
   }
 
   return (
     <ul className="flex flex-col gap-1.5">
       {events.map((event) => (
-        <li key={event.id} className="flex items-baseline justify-between gap-3 border-b border-neutral-100 pb-1.5 text-sm">
-          <span className="text-neutral-800">{event.text}</span>
-          <span className="shrink-0 text-neutral-500">
+        <li key={event.id} className="flex items-baseline justify-between gap-3 border-b border-line pb-1.5 text-sm">
+          <span className="text-ink">{event.text}</span>
+          <span className="shrink-0 text-ink-soft">
             {event.at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </span>
         </li>

@@ -1,9 +1,6 @@
 /**
  * Live feed from `GET /api/v1/realtime`.
  *
- * A browser cannot set headers on a WebSocket handshake, so the JWT travels in
- * the query string — the backend accepts it there for exactly this reason.
- *
  * One socket is shared by the whole application: every screen that wants
  * events subscribes to the same connection instead of opening its own.
  */
@@ -38,10 +35,7 @@ function setConnected(value: boolean) {
 function connect() {
   if (socket || listeners.size === 0) return
 
-  const url = realtimeUrl()
-  if (!url) return
-
-  const ws = new WebSocket(url)
+  const ws = new WebSocket(realtimeUrl())
   socket = ws
 
   ws.addEventListener("open", () => setConnected(true))

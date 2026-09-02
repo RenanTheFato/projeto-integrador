@@ -1,10 +1,10 @@
 /**
  * The shared building blocks every screen is made of.
  *
- * They carry over the visual language of the first version of the interface:
- * square white panels with a plain border over the cream page, a coloured
- * header strip for anything that has a severity, and oversized numbers for the
- * figures a dispatcher reads at a glance.
+ * They set the visual language of the console: white panels with a hairline
+ * over a cool grey workspace, one steel blue for anything that can be acted
+ * on, quiet chips for status, and oversized tabular figures for the numbers a
+ * dispatcher reads at a glance. Colour is spent on meaning and nowhere else.
  */
 
 import { Children, createContext, useContext, useEffect, useState } from "react"
@@ -22,10 +22,10 @@ export function PageHeader({ title, subtitle, actions }: {
   actions?: ReactNode
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-neutral-300 pb-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">{title}</h1>
-        {subtitle && <p className="mt-1 text-neutral-600">{subtitle}</p>}
+        <h1 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-ink-muted sm:text-base">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -44,12 +44,12 @@ export function Panel({ title, icon, actions, children, className }: {
   className?: string
 }) {
   return (
-    <section className={cn("flex flex-col border bg-white", className)}>
+    <section className={cn("flex flex-col rounded-sm border border-line bg-surface", className)}>
       {(title || actions) && (
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3 sm:px-5">
-          <div className="flex items-center gap-2">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface-muted px-4 py-2.5 sm:px-5">
+          <div className="flex items-center gap-2 text-ink-muted">
             {icon}
-            {title && <h2 className="text-lg font-semibold text-neutral-900 sm:text-xl">{title}</h2>}
+            {title && <h2 className="text-sm font-semibold tracking-tight text-ink sm:text-base">{title}</h2>}
           </div>
           {actions}
         </header>
@@ -61,16 +61,25 @@ export function Panel({ title, icon, actions, children, className }: {
 
 // -- Indicators --------------------------------------------------------------
 
+/**
+ * A status, worn quietly.
+ *
+ * The first version filled these solid in a different saturated hue per state,
+ * which put a dozen loud rectangles on a list of incidents and left nothing
+ * for the incident itself to stand out with. A tinted ground with the same
+ * colour in the border and the text says the same thing at a tenth of the
+ * volume — the `tone` comes from the maps in `api/labels`.
+ */
 export function Badge({ tone, children }: { tone: string, children: ReactNode }) {
   return (
-    <span className={cn("inline-flex items-center px-3 py-1 text-sm font-semibold text-white", tone)}>
+    <span className={cn("label-caps inline-flex items-center whitespace-nowrap rounded-sm border px-2 py-0.5", tone)}>
       {children}
     </span>
   )
 }
 
 /** The oversized figure the dashboard is built from. */
-export function StatBox({ icon, label, value, hint, tone = "text-neutral-900" }: {
+export function StatBox({ icon, label, value, hint, tone = "text-ink" }: {
   icon?: ReactNode
   label: string
   value: ReactNode
@@ -78,13 +87,13 @@ export function StatBox({ icon, label, value, hint, tone = "text-neutral-900" }:
   tone?: string
 }) {
   return (
-    <div className="flex flex-col gap-2 border bg-white px-4 py-4 sm:px-5">
-      <div className="flex items-center gap-2 text-neutral-700">
+    <div className="flex flex-col gap-1.5 rounded-sm border border-line bg-surface px-4 py-4 sm:px-5">
+      <div className="flex items-center gap-2 text-ink-muted">
         {icon}
-        <p className="text-lg">{label}</p>
+        <p className="label-caps">{label}</p>
       </div>
-      <p className={cn("text-3xl font-bold sm:text-4xl", tone)}>{value}</p>
-      {hint && <p className="text-sm text-neutral-500">{hint}</p>}
+      <p className={cn("text-3xl font-semibold tabular-nums tracking-tight sm:text-4xl", tone)}>{value}</p>
+      {hint && <p className="text-sm text-ink-soft">{hint}</p>}
     </div>
   )
 }
@@ -94,10 +103,10 @@ export function StatBox({ icon, label, value, hint, tone = "text-neutral-900" }:
 type ButtonTone = "primary" | "neutral" | "danger" | "ghost"
 
 const BUTTON_TONES: Record<ButtonTone, string> = {
-  primary: "border-transparent bg-[#DE5656] text-white hover:bg-[#c94747]",
-  neutral: "border-neutral-800 bg-white text-neutral-900 hover:bg-neutral-100",
-  danger: "border-transparent bg-red-800 text-white hover:bg-red-900",
-  ghost: "border-transparent bg-transparent text-neutral-700 hover:bg-neutral-200",
+  primary: "border-accent bg-accent text-white hover:bg-accent-strong hover:border-accent-strong",
+  neutral: "border-line-strong bg-surface text-ink hover:bg-surface-muted",
+  danger: "border-alert bg-alert text-white hover:bg-alert-strong hover:border-alert-strong",
+  ghost: "border-transparent bg-transparent text-ink-muted hover:bg-mute-soft hover:text-ink",
 }
 
 export function ActionButton({ tone = "neutral", className, children, ...props }:
@@ -106,7 +115,7 @@ export function ActionButton({ tone = "neutral", className, children, ...props }
     <button
       {...props}
       className={cn(
-        "inline-flex items-center justify-center gap-2 border px-4 py-2 font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex items-center justify-center gap-2 rounded-sm border px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         BUTTON_TONES[tone],
         className,
       )}
@@ -165,12 +174,12 @@ export function Field({ label, hint, required, children }: {
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-sm font-semibold text-neutral-800">
+      <span className="label-caps text-ink-muted">
         {label}
-        {required && <span className="text-[#DE5656]"> *</span>}
+        {required && <span className="text-alert"> *</span>}
       </span>
       {children}
-      {hint && <span className="text-xs text-neutral-500">{hint}</span>}
+      {hint && <span className="text-xs text-ink-soft">{hint}</span>}
     </label>
   )
 }
@@ -191,13 +200,15 @@ export function FieldButton({ children, className }: {
 }) {
   return (
     <div className={cn("flex flex-col gap-1", className)}>
-      <span aria-hidden className="select-none text-sm font-semibold text-transparent">.</span>
+      <span aria-hidden className="label-caps select-none text-transparent">.</span>
       {children}
     </div>
   )
 }
 
-const CONTROL = "border border-neutral-400 bg-white px-3 py-2 text-neutral-900 outline-none focus:border-[#DE5656]"
+const CONTROL =
+  "rounded-sm border border-line bg-surface px-3 py-2 text-ink outline-none transition-colors " +
+  "placeholder:text-ink-soft focus:border-accent focus:ring-2 focus:ring-accent/20"
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(CONTROL, props.className)} />
@@ -247,9 +258,9 @@ export function Table({ headers, children }: { headers: string[], children: Reac
       <div className="w-full sm:overflow-x-auto">
         <table className="stack-table w-full border-collapse text-left sm:min-w-[640px]">
           <thead>
-            <tr className="border-b-2 border-neutral-300">
+            <tr className="border-b border-line-strong">
               {headers.map((header) => (
-                <th key={header} className="px-3 py-2 text-sm font-bold uppercase tracking-wide text-neutral-600">
+                <th key={header} className="label-caps px-3 py-2 text-ink-soft">
                   {header}
                 </th>
               ))}
@@ -267,8 +278,8 @@ export function Row({ children, onClick }: { children: ReactNode, onClick?: () =
     <tr
       onClick={onClick}
       className={cn(
-        "border-b border-neutral-200 align-middle",
-        onClick && "cursor-pointer hover:bg-[#F5EFE6]",
+        "border-b border-line align-middle",
+        onClick && "cursor-pointer transition-colors hover:bg-accent-soft",
       )}
     >
       {Children.map(children, (child, index) => (
@@ -294,7 +305,7 @@ export function Cell({ children, className, title }: {
     <td
       title={title}
       data-label={stackLabel}
-      className={cn("px-3 py-2.5 text-neutral-800", className)}
+      className={cn("px-3 py-2.5 text-sm text-ink", className)}
     >
       {children}
     </td>
@@ -312,7 +323,7 @@ export function Pagination({ page, perPage, total, onPage }: {
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-      <p className="text-sm text-neutral-600">
+      <p className="text-sm text-ink-muted">
         {total} registro{total === 1 ? "" : "s"} — página {page} de {pages}
       </p>
 
@@ -378,23 +389,25 @@ export function Modal({ title, onClose, children, wide }: {
   }, [onClose])
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-chrome/70 backdrop-blur-[2px]">
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
           role="dialog"
           aria-modal="true"
           aria-label={title}
           className={cn(
-            "flex max-h-[calc(100dvh-1.5rem)] w-full flex-col border bg-white shadow-xl sm:max-h-[calc(100dvh-3rem)]",
+            "flex max-h-[calc(100dvh-1.5rem)] w-full flex-col rounded-sm border border-line bg-surface shadow-2xl sm:max-h-[calc(100dvh-3rem)]",
             wide ? "max-w-4xl" : "max-w-2xl",
           )}
         >
-          <header className="flex shrink-0 items-center justify-between gap-3 border-b bg-linear-to-r from-red-300 to-orange-300 px-4 py-3 sm:px-5">
-            <h2 className="min-w-0 truncate text-lg font-bold text-neutral-900 sm:text-xl">{title}</h2>
+          {/* The dialog wears the console's own chrome, so it reads as part of
+              the instrument rather than as a card floating over it. */}
+          <header className="flex shrink-0 items-center justify-between gap-3 bg-chrome px-4 py-3 sm:px-5">
+            <h2 className="min-w-0 truncate text-base font-semibold text-chrome-ink sm:text-lg">{title}</h2>
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 px-2 text-2xl leading-none text-neutral-800 hover:text-black"
+              className="shrink-0 rounded-sm px-2 text-2xl leading-none text-chrome-muted transition-colors hover:text-white"
               aria-label="Fechar"
             >
               ×

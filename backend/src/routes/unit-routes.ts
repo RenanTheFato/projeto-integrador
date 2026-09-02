@@ -8,25 +8,23 @@ import { DeleteUnitController } from "../controllers/unit/delete-unit-controller
 
 export async function unitRoutes(fastify: FastifyTypedInstance, plugins: FastifyPluginOptions) {
 
-  // Consultar a estrutura e liberado a qualquer usuario autenticado; alterar
-  // a hierarquia da corporacao fica restrito ao comando.
-  fastify.get("/", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new ListUnitsController().handle(req, rep)
   })
 
-  fastify.get("/:id", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new GetUnitController().handle(req, rep)
   })
 
-  fastify.post("/", { onRequest: [fastify.authorize(["ADMIN", "COMANDANTE"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.post("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new CreateUnitController().handle(req, rep)
   })
 
-  fastify.patch("/:id", { onRequest: [fastify.authorize(["ADMIN", "COMANDANTE"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.patch("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new UpdateUnitController().handle(req, rep)
   })
 
-  fastify.delete("/:id", { onRequest: [fastify.authorize(["ADMIN"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.delete("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new DeleteUnitController().handle(req, rep)
   })
 }

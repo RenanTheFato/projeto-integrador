@@ -14,9 +14,9 @@ import { useState } from "react"
 
 import { useMeasure } from "@/hooks/use-measure"
 
-const BAR_COLOR = "#1565C0"
-const GRID_COLOR = "#E5E5E5"
-const AXIS_INK = "#737373"
+const BAR_COLOR = "#0B63A5"
+const GRID_COLOR = "#E4E9EF"
+const AXIS_INK = "#8496A5"
 
 // -- ranking -----------------------------------------------------------------
 
@@ -34,7 +34,7 @@ export function Ranking({ items, emptyMessage, unit = "ocorrências" }: {
   unit?: string
 }) {
   if (items.length === 0) {
-    return <p className="text-neutral-600">{emptyMessage}</p>
+    return <p className="text-ink-muted">{emptyMessage}</p>
   }
 
   const max = Math.max(...items.map((item) => item.value), 1)
@@ -44,12 +44,12 @@ export function Ranking({ items, emptyMessage, unit = "ocorrências" }: {
       {items.map((item, index) => (
         <li key={item.key} className="flex flex-col gap-1">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="min-w-0 text-neutral-800">
-              <span className="mr-2 text-sm font-bold text-neutral-400">{index + 1}</span>
+            <span className="min-w-0 text-ink">
+              <span className="mr-2 text-sm font-semibold text-ink-soft">{index + 1}</span>
               {item.label}
             </span>
             <strong
-              className="shrink-0 font-bold text-neutral-900"
+              className="shrink-0 font-semibold text-ink"
               style={{ fontVariantNumeric: "tabular-nums" }}
             >
               {item.value}
@@ -68,7 +68,7 @@ export function Ranking({ items, emptyMessage, unit = "ocorrências" }: {
             aria-label={`${item.label}: ${item.value} ${unit}`}
           />
 
-          {item.note && <span className="text-sm text-neutral-500">{item.note}</span>}
+          {item.note && <span className="text-sm text-ink-soft">{item.note}</span>}
         </li>
       ))}
     </ol>
@@ -94,7 +94,7 @@ export function HourHistogram({ counts }: { counts: number[] }) {
   const total = counts.reduce((sum, value) => sum + value, 0)
 
   if (total === 0) {
-    return <p className="text-neutral-600">Nenhuma ocorrência no período filtrado.</p>
+    return <p className="text-ink-muted">Nenhuma ocorrência no período filtrado.</p>
   }
 
   const max = Math.max(...counts, 1)
@@ -172,7 +172,7 @@ export function HourHistogram({ counts }: { counts: number[] }) {
 
       {hover !== null && width > 0 && (
         <div
-          className="pointer-events-none absolute top-0 z-10 border border-neutral-300 bg-white px-2.5 py-1.5 shadow-lg"
+          className="pointer-events-none absolute top-0 z-10 border border-line bg-surface px-2.5 py-1.5 shadow-lg"
           style={{
             left: Math.min(
               Math.max(PADDING.left + slot * hover + slot / 2 - 60, 0),
@@ -182,12 +182,12 @@ export function HourHistogram({ counts }: { counts: number[] }) {
         >
           <p className="whitespace-nowrap text-sm">
             <strong
-              className="font-bold text-neutral-900"
+              className="font-semibold text-ink"
               style={{ fontVariantNumeric: "tabular-nums" }}
             >
               {counts[hover]}
             </strong>{" "}
-            <span className="text-neutral-500">
+            <span className="text-ink-soft">
               entre {String(hover).padStart(2, "0")}h e {String(hover).padStart(2, "0")}h59
             </span>
           </p>
@@ -225,7 +225,7 @@ export function TimeSeries({ current, previous, currentLabel, previousLabel }: {
   const [hover, setHover] = useState<number | null>(null)
 
   if (current.length < 2) {
-    return <p className="text-neutral-600">Período curto demais para desenhar uma série.</p>
+    return <p className="text-ink-muted">Período curto demais para desenhar uma série.</p>
   }
 
   const plotWidth = Math.max(0, width - SERIES_PADDING.left - SERIES_PADDING.right)
@@ -356,10 +356,10 @@ export function TimeSeries({ current, previous, currentLabel, previousLabel }: {
 
         {hover !== null && width > 0 && (
           <div
-            className="pointer-events-none absolute top-1 z-10 min-w-36 border border-neutral-300 bg-white px-3 py-2 shadow-lg"
+            className="pointer-events-none absolute top-1 z-10 min-w-36 border border-line bg-surface px-3 py-2 shadow-lg"
             style={{ left: Math.min(Math.max(x(hover) - 70, 0), Math.max(width - 150, 0)) }}
           >
-            <p className="text-sm text-neutral-500">{current[hover].label}</p>
+            <p className="text-sm text-ink-soft">{current[hover].label}</p>
             <TooltipRow color={BAR_COLOR} label={currentLabel} value={String(current[hover].value)} />
             {previous && previous[hover] && previousLabel && (
               <TooltipRow
@@ -378,7 +378,7 @@ export function TimeSeries({ current, previous, currentLabel, previousLabel }: {
 // -- weekday x hour grid ------------------------------------------------------
 
 /** One hue, light to dark. Density is a magnitude, so it never gets a rainbow. */
-const RAMP = ["#F1F5F9", "#DBEAFE", "#93C5FD", "#3B82F6", "#1565C0", "#0B3C74"]
+const RAMP = ["#F1F5F9", "#DCE8F2", "#A9C8E1", "#5D9BC9", "#0B63A5", "#083F6B"]
 
 function rampColor(ratio: number): string {
   if (ratio <= 0) return RAMP[0]
@@ -405,7 +405,7 @@ export function HeatGrid({ rows, values }: {
   const total = values.flat().reduce((sum, value) => sum + value, 0)
 
   if (total === 0) {
-    return <p className="text-neutral-600">Nenhuma ocorrência no período filtrado.</p>
+    return <p className="text-ink-muted">Nenhuma ocorrência no período filtrado.</p>
   }
 
   const labelWidth = 34
@@ -466,7 +466,7 @@ export function HeatGrid({ rows, values }: {
 
         {hover && width > 0 && (
           <div
-            className="pointer-events-none absolute z-10 border border-neutral-300 bg-white px-2.5 py-1.5 shadow-lg"
+            className="pointer-events-none absolute z-10 border border-line bg-surface px-2.5 py-1.5 shadow-lg"
             style={{
               top: Math.max(0, hover.row * cellHeight - 34),
               left: Math.min(Math.max(labelWidth + hover.hour * cell - 60, 0), Math.max(width - 150, 0)),
@@ -474,12 +474,12 @@ export function HeatGrid({ rows, values }: {
           >
             <p className="whitespace-nowrap text-sm">
               <strong
-                className="font-bold text-neutral-900"
+                className="font-semibold text-ink"
                 style={{ fontVariantNumeric: "tabular-nums" }}
               >
                 {values[hover.row][hover.hour]}
               </strong>{" "}
-              <span className="text-neutral-500">
+              <span className="text-ink-soft">
                 {rows[hover.row]}, {String(hover.hour).padStart(2, "0")}h
               </span>
             </p>
@@ -487,12 +487,12 @@ export function HeatGrid({ rows, values }: {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-600">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
         <span>0</span>
         {RAMP.map((color) => (
           <span
             key={color}
-            className="h-3 w-8 border border-neutral-200"
+            className="h-3 w-8 border border-line"
             style={{ background: color }}
           />
         ))}
@@ -505,14 +505,14 @@ export function HeatGrid({ rows, values }: {
 
 // -- shared pieces ------------------------------------------------------------
 
-const CONTEXT_COLOR = "#A3A3A3"
+const CONTEXT_COLOR = "#94A3B8"
 const SURFACE = "#FFFFFF"
 
 function Legend({ items }: { items: { color: string, label: string, dashed?: boolean }[] }) {
   return (
     <ul className="flex flex-wrap items-center gap-x-5 gap-y-1">
       {items.map((item) => (
-        <li key={item.label} className="flex items-center gap-2 text-sm text-neutral-600">
+        <li key={item.label} className="flex items-center gap-2 text-sm text-ink-muted">
           <svg width="18" height="8" aria-hidden className="shrink-0">
             <line
               x1="0" y1="4" x2="18" y2="4"
@@ -534,10 +534,10 @@ function TooltipRow({ color, label, value }: { color: string, label: string, val
       <svg width="14" height="8" aria-hidden className="shrink-0">
         <line x1="0" y1="4" x2="14" y2="4" stroke={color} strokeWidth={2.5} strokeLinecap="round" />
       </svg>
-      <strong className="font-bold text-neutral-900" style={{ fontVariantNumeric: "tabular-nums" }}>
+      <strong className="font-semibold text-ink" style={{ fontVariantNumeric: "tabular-nums" }}>
         {value}
       </strong>
-      <span className="text-sm text-neutral-500">{label}</span>
+      <span className="text-sm text-ink-soft">{label}</span>
     </p>
   )
 }

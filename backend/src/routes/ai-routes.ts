@@ -5,25 +5,25 @@ import { GetTrainingController, ListTrainingsController, ModelInfoController, St
 
 export async function aiRoutes(fastify: FastifyTypedInstance, plugins: FastifyPluginOptions) {
 
-  fastify.post("/routes", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.post("/routes", async (req: FastifyRequest, rep: FastifyReply) => {
     return new CalculateRouteController().handle(req, rep)
   })
 
-  fastify.get("/model", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/model", async (req: FastifyRequest, rep: FastifyReply) => {
     return new ModelInfoController().handle(req, rep)
   })
 
-  // Retraining rewrites the model every dispatch depends on, so it is an
-  // administrative action, not a dispatcher one.
-  fastify.post("/training", { onRequest: [fastify.authorize(["ADMIN"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  // Retraining rewrites the model every dispatch depends on, so it is fired
+  // from the neural network screen and never as a side effect of a request.
+  fastify.post("/training", async (req: FastifyRequest, rep: FastifyReply) => {
     return new StartTrainingController().handle(req, rep)
   })
 
-  fastify.get("/training", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/training", async (req: FastifyRequest, rep: FastifyReply) => {
     return new ListTrainingsController().handle(req, rep)
   })
 
-  fastify.get("/training/:id", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/training/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new GetTrainingController().handle(req, rep)
   })
 }

@@ -18,14 +18,10 @@ import {
   Row, Select, Table, TextInput,
 } from "@/components/layout/kit"
 import { EmptyState, ErrorBox, ErrorDetails, LoadingBlock } from "@/components/layout/feedback"
-import { useAuth } from "@/auth/auth-context"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatDateTime, toLocalInputValue } from "@/lib/format"
 
 export default function Turnos() {
-  const { can } = useAuth()
-  const mayManage = can(["ADMIN", "COMANDANTE"])
-
   const [page, setPage] = useState(1)
   const [type, setType] = useState("")
   const [unitId, setUnitId] = useState("")
@@ -48,7 +44,7 @@ export default function Turnos() {
       <PageHeader
         title="Turnos"
         subtitle="Escala de serviço do efetivo"
-        actions={mayManage && (
+        actions={(
           <ActionButton tone="primary" onClick={() => setCreating(true)}>
             <Plus className="h-5 w-5" />
             Novo turno
@@ -84,9 +80,9 @@ export default function Turnos() {
 
       {list.data && list.data.items.length > 0 && (
         <Panel title="Escala" icon={<CalendarClock className="h-5 w-5" />}>
-          <Table headers={["Bombeiro", "Tipo", "Início", "Término", "Unidade", ...(mayManage ? ["Ações"] : [])]}>
+          <Table headers={["Bombeiro", "Tipo", "Início", "Término", "Unidade", "Ações"]}>
             {list.data.items.map((shift) => (
-              <ShiftRow key={shift.id} shift={shift} mayManage={mayManage} onChanged={list.reload} />
+              <ShiftRow key={shift.id} shift={shift} onChanged={list.reload} />
             ))}
           </Table>
 
@@ -104,9 +100,9 @@ export default function Turnos() {
   )
 }
 
-function ShiftRow({ shift, mayManage, onChanged }: {
+function ShiftRow({ shift, onChanged }: {
   shift: import("@/api/types").Shift
-  mayManage: boolean
+
   onChanged: () => void
 }) {
   const remove = useMutation(() => shifts.remove(shift.id))
@@ -128,20 +124,18 @@ function ShiftRow({ shift, mayManage, onChanged }: {
       <Cell className="whitespace-nowrap">{formatDateTime(shift.end_at)}</Cell>
       <Cell>{shift.unit?.acronym ?? "—"}</Cell>
 
-      {mayManage && (
-        <Cell>
-          <ActionButton
-            tone="ghost"
-            className="px-2 py-1 text-sm"
-            disabled={remove.submitting}
-            onClick={handleRemove}
-          >
-            <Trash2 className="h-4 w-4" />
-            Excluir
-          </ActionButton>
-          {remove.error && <span className="mt-1 block text-sm text-[#DE5656]">{remove.error}</span>}
-        </Cell>
-      )}
+      <Cell>
+        <ActionButton
+          tone="ghost"
+          className="px-2 py-1 text-sm"
+          disabled={remove.submitting}
+          onClick={handleRemove}
+        >
+          <Trash2 className="h-4 w-4" />
+          Excluir
+        </ActionButton>
+        {remove.error && <span className="mt-1 block text-sm text-alert">{remove.error}</span>}
+      </Cell>
     </Row>
   )
 }

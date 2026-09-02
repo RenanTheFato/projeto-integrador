@@ -1,6 +1,5 @@
 import { FastifyPluginOptions, FastifyReply, FastifyRequest } from "fastify";
 import { FastifyTypedInstance } from "../@types/fastify-types.js";
-import { authRoutes } from "./auth-routes.js";
 import { unitRoutes } from "./unit-routes.js";
 import { firefighterRoutes } from "./firefighter-routes.js";
 import { vehicleRoutes } from "./vehicle-routes.js";
@@ -17,7 +16,6 @@ export async function routes(fastify: FastifyTypedInstance, plugins: FastifyPlug
     })
   })
 
-  await fastify.register(authRoutes, { prefix: "/auth" })
   await fastify.register(unitRoutes, { prefix: "/units" })
   await fastify.register(firefighterRoutes, { prefix: "/firefighters" })
   await fastify.register(vehicleRoutes, { prefix: "/vehicles" })

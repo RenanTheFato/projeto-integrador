@@ -171,19 +171,19 @@ export default function Rotas() {
           </div>
 
           {nearest && !outsideCoverage && (
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border border-[#1565C0] bg-[#1565C0]/10 px-4 py-2 text-neutral-900">
-              <MapPin className="h-4 w-4 shrink-0 text-[#1565C0]" />
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-accent/30 bg-accent-soft px-4 py-2 text-ink">
+              <MapPin className="h-4 w-4 shrink-0 text-accent" />
               <span>
                 Quartel mais próximo do destino: <strong>{nearest.item.acronym}</strong> —{" "}
                 {nearest.item.name}, a {formatDistance(nearest.meters)} em linha reta.
               </span>
               {nearestIsOrigin
-                ? <span className="text-sm font-semibold text-[#1565C0]">Já é a origem selecionada.</span>
+                ? <span className="text-sm font-semibold text-accent">Já é a origem selecionada.</span>
                 : (
                   <button
                     type="button"
                     onClick={() => handleStationSelect(nearest.item.id)}
-                    className="text-sm font-semibold text-[#1565C0] underline underline-offset-2 hover:text-[#0f4c8f]"
+                    className="text-sm font-semibold text-accent underline underline-offset-2 hover:text-accent-strong"
                   >
                     Usar como origem
                   </button>
@@ -192,7 +192,7 @@ export default function Rotas() {
           )}
 
           {outsideCoverage && coverage && (
-            <p className="border border-[#E8A240] bg-[#E8A240]/15 px-4 py-2 text-neutral-900">
+            <p className="rounded-sm border border-warn/30 bg-warn-soft px-4 py-2 text-ink">
               Esse destino está fora do retângulo tracejado no mapa, que é toda a malha viária
               que o modelo conhece. A malha vai de {formatCoordinate(coverage.min_latitude)} a{" "}
               {formatCoordinate(coverage.max_latitude)} de latitude e de{" "}
@@ -202,7 +202,7 @@ export default function Rotas() {
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-neutral-600">
+            <p className="text-sm text-ink-muted">
               {model.data
                 ? `Malha de ${model.data.city}: ${model.data.graph_nodes.toLocaleString("pt-BR")} nós e ${model.data.graph_edges.toLocaleString("pt-BR")} ruas. Pontos a mais de ${((coverage?.max_snap_distance_m ?? 2000) / 1000).toLocaleString("pt-BR")} km de uma rua mapeada são recusados — o norte rural do município quase não tem ruas no OpenStreetMap.`
                 : "O ponto precisa cair dentro da malha viária de Taubaté."}
@@ -241,7 +241,7 @@ export default function Rotas() {
 
         <Panel title="Comparação" icon={<Brain className="h-5 w-5" />}>
           {!result && (
-            <p className="text-neutral-600">
+            <p className="text-ink-muted">
               As duas rotas — a que a rede neural considera mais rápida e a mais curta em metros —
               aparecem aqui lado a lado.
             </p>
@@ -251,14 +251,16 @@ export default function Rotas() {
             <>
               <VariantBlock
                 title="Rede neural"
-                accent="border-[#E53935]"
+                accent="border-accent"
                 preview={result.neural}
                 note="Ponderada pelo tempo que o modelo estima para cada rua"
               />
 
+              {/* The baseline wears no colour: the accent belongs to the route
+                  the system is actually proposing. */}
               <VariantBlock
                 title="Menor distância"
-                accent="border-[#1565C0]"
+                accent="border-line-strong"
                 preview={result.shortest}
                 note="Dijkstra sobre o comprimento das ruas"
               />
@@ -279,13 +281,13 @@ function VariantBlock({ title, accent, preview, note }: {
   note: string
 }) {
   return (
-    <div className={`flex flex-col gap-1 border-l-4 bg-[#F5EFE6] px-4 py-3 ${accent}`}>
-      <p className="font-bold text-neutral-900">{title}</p>
-      <p className="text-3xl font-bold text-neutral-900">{formatDuration(preview.estimated_time_seconds)}</p>
-      <p className="text-neutral-700">
+    <div className={`flex flex-col gap-1 rounded-sm border-l-4 bg-surface-muted px-4 py-3 ${accent}`}>
+      <p className="font-semibold text-ink">{title}</p>
+      <p className="text-3xl font-semibold text-ink">{formatDuration(preview.estimated_time_seconds)}</p>
+      <p className="text-ink-muted">
         {formatDistance(preview.distance_meters)} · {preview.node_count} cruzamentos
       </p>
-      <p className="text-sm text-neutral-500">{note}</p>
+      <p className="text-sm text-ink-soft">{note}</p>
     </div>
   )
 }
@@ -299,22 +301,22 @@ function Verdict({ neural, shortest }: { neural: RoutePreview, shortest: RoutePr
   const extraMeters = neural.distance_meters - shortest.distance_meters
 
   return (
-    <div className="border bg-white px-4 py-3">
+    <div className="rounded-sm border border-line bg-surface px-4 py-3">
       {saved > 0 ? (
-        <p className="text-neutral-900">
-          A rede neural economiza <strong className="text-green-700">{formatDuration(saved)}</strong>{" "}
+        <p className="text-ink">
+          A rede neural economiza <strong className="text-ok">{formatDuration(saved)}</strong>{" "}
           ({percent.toFixed(1).replace(".", ",")}%)
           {extraMeters > 0
             ? <> aceitando {formatDistance(extraMeters)} a mais de percurso.</>
             : <> e ainda percorre menos {formatDistance(Math.abs(extraMeters))}.</>}
         </p>
       ) : saved < 0 ? (
-        <p className="text-neutral-900">
+        <p className="text-ink">
           Neste par de pontos o caminho mais curto venceu por{" "}
-          <strong className="text-[#DE5656]">{formatDuration(Math.abs(saved))}</strong>.
+          <strong className="text-alert">{formatDuration(Math.abs(saved))}</strong>.
         </p>
       ) : (
-        <p className="text-neutral-900">As duas rotas empatam no tempo estimado.</p>
+        <p className="text-ink">As duas rotas empatam no tempo estimado.</p>
       )}
     </div>
   )

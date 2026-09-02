@@ -85,9 +85,9 @@ export interface RouteMapProps {
    * never does.
    */
   stations?: MapStation[]
-  /** Drawn in the origin's red. */
+  /** Drawn in the accent, like the route that leaves from it. */
   selectedStationId?: string | null
-  /** Drawn in blue, as the suggestion it is. */
+  /** Drawn in teal, as the suggestion it is. */
   nearestStationId?: string | null
   /** When given, station pins are clickable. */
   onStationSelect?: (id: string) => void
@@ -268,11 +268,11 @@ export default function RouteMap({
     }
 
     if (!originMarker.current) {
-      originMarker.current = createMarker(map, at[0], "#E53935", "B", originLabel)
+      originMarker.current = createMarker(map, at[0], "#0B63A5", "B", originLabel)
     }
     if (!destinationMarker.current) {
       destinationMarker.current = createMarker(
-        map, at[at.length - 1], "#FFB300", "!", destinationLabel,
+        map, at[at.length - 1], "#A32A20", "!", destinationLabel,
       )
     }
 
@@ -399,7 +399,7 @@ export default function RouteMap({
     const at: LngLat = [pin.longitude, pin.latitude]
 
     if (!pinMarker.current) {
-      pinMarker.current = createMarker(map, at, "#FFB300", "!", pin.label ?? "Destino")
+      pinMarker.current = createMarker(map, at, "#A32A20", "!", pin.label ?? "Destino")
     } else {
       pinMarker.current.setLngLat(at)
     }
@@ -706,9 +706,9 @@ export default function RouteMap({
 
   if (!showMap) {
     return (
-      <div className={cn("flex flex-col items-center justify-center gap-3 border bg-white", className)}>
-        <MapPinOff className="h-12 w-12 text-neutral-400" />
-        <p className="text-neutral-600">{emptyMessage}</p>
+      <div className={cn("flex flex-col items-center justify-center gap-3 border bg-surface", className)}>
+        <MapPinOff className="h-12 w-12 text-ink-soft" />
+        <p className="text-ink-muted">{emptyMessage}</p>
       </div>
     )
   }

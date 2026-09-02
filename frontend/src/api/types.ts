@@ -4,8 +4,6 @@
  * generated client would drag the whole Prisma surface into the bundle.
  */
 
-export type UserRole = "ADMIN" | "COMANDANTE" | "OPERADOR"
-
 export type UnitType =
   | "COMANDO_GERAL" | "COMANDO_REGIONAL" | "GRUPAMENTO" | "SUBGRUPAMENTO" | "POSTO"
 
@@ -42,13 +40,6 @@ export type DispatchStatus =
 export type RouteAlgorithm = "NEURAL" | "DIJKSTRA"
 
 export type TrainingStatus = "PENDENTE" | "EXECUTANDO" | "CONCLUIDO" | "FALHOU"
-
-export interface User {
-  id: string
-  email: string
-  role: UserRole
-  firefighter_id?: string | null
-}
 
 export interface Unit {
   id: string

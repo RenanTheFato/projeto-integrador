@@ -10,8 +10,8 @@ import { api, query } from "./client"
 import type {
   Crew, CrewRole, Dispatch, DispatchStatus, Firefighter, FirefighterStatus, ModelInfo,
   Occurrence, OccurrenceNature, OccurrencePriority, OccurrenceStatus, Paginated, Rank,
-  RoutePreview, RouteVariant, Shift, ShiftType, TrainingRun, Unit, UnitType, User,
-  UserRole, Vehicle, VehicleStatus, VehicleType,
+  RoutePreview, RouteVariant, Shift, ShiftType, TrainingRun, Unit, UnitType,
+  Vehicle, VehicleStatus, VehicleType,
 } from "./types"
 
 interface ListParams {
@@ -27,31 +27,6 @@ function paginate<T>(envelope: Record<string, unknown>, key: string): Paginated<
     page: (envelope.page as number) ?? 1,
     per_page: (envelope.per_page as number) ?? 20,
   }
-}
-
-// -- Auth --------------------------------------------------------------------
-
-export const auth = {
-  /**
-   * Answers the token plus the JWT payload — `sub`, not `id`, and none of the
-   * other user fields. Callers that need a user record read `/auth/me`.
-   */
-  login: (email: string, password: string) =>
-    api.post<{ token: string, user: { sub: string, email: string, role: UserRole } }>(
-      "/auth/login", { email, password },
-    ),
-
-  async me(signal?: AbortSignal): Promise<User> {
-    const data = await api.get<{ user: User }>("/auth/me", signal)
-    return data.user
-  },
-
-  async register(input: { email: string, password: string, role: UserRole, firefighter_id?: string }): Promise<User> {
-    const data = await api.post<{ user: User }>("/auth/register", input)
-    return data.user
-  },
-
-  logout: () => api.post<{ message: string }>("/auth/logout"),
 }
 
 // -- Units -------------------------------------------------------------------

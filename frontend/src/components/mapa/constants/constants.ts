@@ -1,4 +1,4 @@
-export const ROUTE_COLOR = "#E53935"
+export const ROUTE_COLOR = "#0B63A5"
 export const ROUTE_ALT = 25
 export const ORBIT_PERIOD = 7_000
 export const FOLLOW_KMH = 280

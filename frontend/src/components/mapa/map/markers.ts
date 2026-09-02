@@ -37,8 +37,9 @@ export function createMarker(
  *
  * Choosing where a vehicle leaves from means comparing stations, and comparing
  * dots means hovering each one to find out which is which. The acronym travels
- * with the pin, and the selected station wears the same red as the route it is
- * the origin of.
+ * with the pin, and the selected station wears the same accent as the route it
+ * is the origin of; the nearest suggestion wears teal, so the two never read as
+ * the same choice.
  */
 export function createStationMarker(
   map: maplibregl.Map,
@@ -48,7 +49,7 @@ export function createStationMarker(
 ): maplibregl.Marker {
   const element = document.createElement("div")
 
-  const background = options.selected ? "#DE5656" : options.nearest ? "#1565C0" : "#1F2937"
+  const background = options.selected ? "#0B63A5" : options.nearest ? "#0E6E75" : "#1E293B"
 
   element.style.cssText = `
     display:flex;align-items:center;gap:5px;
@@ -145,7 +146,7 @@ export function addArrowLayer(map: maplibregl.Map, start: LngLat) {
          xmlns="http://www.w3.org/2000/svg">
       <ellipse cx="32" cy="58" rx="14" ry="4" fill="rgba(0,0,0,0.25)"/>
       <path d="M32 4 L50 52 L32 42 L14 52 Z"
-            fill="#1565C0" stroke="white" stroke-width="3"
+            fill="#0B63A5" stroke="white" stroke-width="3"
             stroke-linejoin="round"/>
       <path d="M32 12 L44 46 L32 38 L20 46 Z"
             fill="rgba(255,255,255,0.18)"/>

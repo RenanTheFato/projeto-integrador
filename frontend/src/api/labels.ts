@@ -4,13 +4,31 @@
  * The enum values keep the corporation's official nomenclature, which is not
  * translatable and not readable in an interface either, so every screen goes
  * through this module instead of printing the raw value.
+ *
+ * Two kinds of colour live here, and they are not interchangeable. A `*_TONE`
+ * is a quiet chip — a tinted ground, a hairline and coloured text — worn by a
+ * status the operator reads. `PRIORITY_TONE` is a solid fill, worn only by the
+ * severity block on an incident, because severity is the one thing on these
+ * screens allowed to shout.
  */
 
 import type {
   CrewRole, DispatchStatus, FirefighterStatus, OccurrenceNature, OccurrencePriority,
-  OccurrenceStatus, Rank, ShiftType, TrainingStatus, UnitType, UserRole,
+  OccurrenceStatus, Rank, ShiftType, TrainingStatus, UnitType,
   VehicleStatus, VehicleType,
 } from "./types"
+
+/** Every status chip in the system is one of these. */
+export const TONE = {
+  alert: "border-alert/25 bg-alert-soft text-alert",
+  warn: "border-warn/25 bg-warn-soft text-warn",
+  accent: "border-accent/25 bg-accent-soft text-accent",
+  info: "border-info/25 bg-info-soft text-info",
+  ok: "border-ok/25 bg-ok-soft text-ok",
+  mute: "border-line-strong bg-mute-soft text-ink-muted",
+  /* Outline only, no ground: a record that was called off never happened. */
+  off: "border-line-strong bg-transparent text-ink-soft",
+} as const
 
 export const UNIT_TYPE_LABEL: Record<UnitType, string> = {
   COMANDO_GERAL: "Comando Geral",
@@ -45,16 +63,10 @@ export const FIREFIGHTER_STATUS_LABEL: Record<FirefighterStatus, string> = {
 }
 
 export const FIREFIGHTER_STATUS_TONE: Record<FirefighterStatus, string> = {
-  ATIVO: "bg-green-600",
-  FERIAS: "bg-sky-600",
-  AFASTADO: "bg-[#E8A240]",
-  INATIVO: "bg-neutral-500",
-}
-
-export const USER_ROLE_LABEL: Record<UserRole, string> = {
-  ADMIN: "Administrador",
-  COMANDANTE: "Comandante",
-  OPERADOR: "Operador",
+  ATIVO: TONE.ok,
+  FERIAS: TONE.accent,
+  AFASTADO: TONE.warn,
+  INATIVO: TONE.mute,
 }
 
 export const VEHICLE_TYPE_LABEL: Record<VehicleType, string> = {
@@ -79,10 +91,10 @@ export const VEHICLE_STATUS_LABEL: Record<VehicleStatus, string> = {
 }
 
 export const VEHICLE_STATUS_TONE: Record<VehicleStatus, string> = {
-  DISPONIVEL: "bg-green-600",
-  EMPENHADA: "bg-[#DE5656]",
-  MANUTENCAO: "bg-[#E8A240]",
-  INDISPONIVEL: "bg-neutral-500",
+  DISPONIVEL: TONE.ok,
+  EMPENHADA: TONE.alert,
+  MANUTENCAO: TONE.warn,
+  INDISPONIVEL: TONE.mute,
 }
 
 export const CREW_ROLE_LABEL: Record<CrewRole, string> = {
@@ -118,20 +130,25 @@ export const PRIORITY_LABEL: Record<OccurrencePriority, string> = {
   CRITICA: "Crítica",
 }
 
-/// The palette the original screens used for severity: red for the worst,
-/// amber in the middle, green for the routine call.
+/**
+ * The solid severity block, and the only saturated fill in the interface.
+ *
+ * It is a ramp, not a set of categories: the same hue family darkens as the
+ * call gets worse, so the four steps can be ordered at a glance and a reader
+ * who cannot separate the reds still sees the block get heavier.
+ */
 export const PRIORITY_TONE: Record<OccurrencePriority, string> = {
-  BAIXA: "bg-green-600",
-  MEDIA: "bg-[#E8A240]",
-  ALTA: "bg-[#DE5656]",
-  CRITICA: "bg-red-800",
+  BAIXA: "bg-ok",
+  MEDIA: "bg-warn",
+  ALTA: "bg-alert",
+  CRITICA: "bg-alert-strong",
 }
 
 export const PRIORITY_TEXT_TONE: Record<OccurrencePriority, string> = {
-  BAIXA: "text-green-700",
-  MEDIA: "text-orange-600",
-  ALTA: "text-red-600",
-  CRITICA: "text-red-800",
+  BAIXA: "text-ok",
+  MEDIA: "text-warn",
+  ALTA: "text-alert",
+  CRITICA: "text-alert-strong",
 }
 
 export const OCCURRENCE_STATUS_LABEL: Record<OccurrenceStatus, string> = {
@@ -143,11 +160,11 @@ export const OCCURRENCE_STATUS_LABEL: Record<OccurrenceStatus, string> = {
 }
 
 export const OCCURRENCE_STATUS_TONE: Record<OccurrenceStatus, string> = {
-  ABERTA: "bg-[#DE5656]",
-  DESPACHADA: "bg-[#E8A240]",
-  EM_ATENDIMENTO: "bg-sky-600",
-  ENCERRADA: "bg-green-600",
-  CANCELADA: "bg-neutral-500",
+  ABERTA: TONE.alert,
+  DESPACHADA: TONE.warn,
+  EM_ATENDIMENTO: TONE.accent,
+  ENCERRADA: TONE.ok,
+  CANCELADA: TONE.off,
 }
 
 /**
@@ -172,12 +189,12 @@ export const DISPATCH_STATUS_LABEL: Record<DispatchStatus, string> = {
 }
 
 export const DISPATCH_STATUS_TONE: Record<DispatchStatus, string> = {
-  DESPACHADO: "bg-[#E8A240]",
-  A_CAMINHO: "bg-sky-600",
-  NO_LOCAL: "bg-indigo-600",
-  RETORNANDO: "bg-teal-600",
-  FINALIZADO: "bg-green-600",
-  CANCELADO: "bg-neutral-500",
+  DESPACHADO: TONE.warn,
+  A_CAMINHO: TONE.accent,
+  NO_LOCAL: TONE.info,
+  RETORNANDO: TONE.mute,
+  FINALIZADO: TONE.ok,
+  CANCELADO: TONE.off,
 }
 
 /**
@@ -201,10 +218,10 @@ export const TRAINING_STATUS_LABEL: Record<TrainingStatus, string> = {
 }
 
 export const TRAINING_STATUS_TONE: Record<TrainingStatus, string> = {
-  PENDENTE: "bg-neutral-500",
-  EXECUTANDO: "bg-sky-600",
-  CONCLUIDO: "bg-green-600",
-  FALHOU: "bg-[#DE5656]",
+  PENDENTE: TONE.mute,
+  EXECUTANDO: TONE.accent,
+  CONCLUIDO: TONE.ok,
+  FALHOU: TONE.alert,
 }
 
 /** Turns a `Record<K, string>` into the option list a <select> expects. */

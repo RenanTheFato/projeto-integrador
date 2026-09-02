@@ -31,8 +31,9 @@
   }
 
   .stack-table tr {
-    border: 1px solid #d4d4d4;
-    background: #fff;
+    border: 1px solid var(--color-line);
+    border-radius: 2px;
+    background: var(--color-surface);
     margin-bottom: 0.75rem;
     padding: 0.25rem 0.75rem;
   }
@@ -44,7 +45,7 @@
     gap: 1rem;
     padding: 0.5rem 0;
     border: 0;
-    border-bottom: 1px solid #f5f5f5;
+    border-bottom: 1px solid var(--color-neutral-100);
     text-align: right;
   }
 
@@ -58,9 +59,9 @@
     text-align: left;
     font-size: 0.75rem;
     font-weight: 700;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #737373;
+    color: var(--color-ink-soft);
   }
 
   /* A cell with no column name — the actions column — gets the whole width

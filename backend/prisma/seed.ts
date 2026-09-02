@@ -1,6 +1,5 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
-import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
 
 dotenv.config()
@@ -75,33 +74,9 @@ async function seedUnits() {
   return taubate
 }
 
-async function seedAdmin() {
-  const email = process.env.SEED_ADMIN_EMAIL ?? "admin@bombeiros.local"
-  const password = process.env.SEED_ADMIN_PASSWORD ?? "admin12345"
-
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } })
-
-  if (existing) {
-    console.log(`  admin: ${email} (ja existia)`)
-    return
-  }
-
-  await prisma.user.create({
-    data: {
-      email,
-      password_hash: await bcrypt.hash(password, 10),
-      role: "ADMIN"
-    }
-  })
-
-  console.log(`  admin: ${email} / ${password}`)
-  console.log("  ATENCAO: troque essa senha antes de qualquer uso real.")
-}
-
 async function main() {
   console.log("Populando dados iniciais...")
   await seedUnits()
-  await seedAdmin()
   console.log("Concluido.")
 }
 

@@ -20,14 +20,9 @@ import {
   Panel, Row, Select, Table, TextInput,
 } from "@/components/layout/kit"
 import { EmptyState, ErrorBox, ErrorDetails, LoadingBlock } from "@/components/layout/feedback"
-import { useAuth } from "@/auth/auth-context"
 import { useMutation, useResource } from "@/hooks/use-resource"
 
 export default function Viaturas() {
-  const { can } = useAuth()
-  const mayManage = can(["ADMIN", "COMANDANTE"])
-  const mayDelete = can(["ADMIN"])
-
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState("")
   const [type, setType] = useState("")
@@ -50,7 +45,7 @@ export default function Viaturas() {
       <PageHeader
         title="Viaturas"
         subtitle="Frota e disponibilidade para despacho"
-        actions={mayManage && (
+        actions={(
           <ActionButton tone="primary" onClick={() => setCreating(true)}>
             <Plus className="h-5 w-5" />
             Nova viatura
@@ -88,10 +83,10 @@ export default function Viaturas() {
         <Panel title="Frota" icon={<Car className="h-5 w-5" />}>
           <Table headers={[
             "Prefixo", "Tipo", "Placa", "Modelo", "Ano", "Guarnição", "Unidade", "Situação",
-            ...(mayDelete ? ["Ações"] : []),
+            "Ações",
           ]}>
             {list.data.items.map((vehicle) => (
-              <VehicleRow key={vehicle.id} vehicle={vehicle} mayDelete={mayDelete} onChanged={list.reload} />
+              <VehicleRow key={vehicle.id} vehicle={vehicle} onChanged={list.reload} />
             ))}
           </Table>
 
@@ -110,9 +105,8 @@ export default function Viaturas() {
   )
 }
 
-function VehicleRow({ vehicle, mayDelete, onChanged }: {
+function VehicleRow({ vehicle, onChanged }: {
   vehicle: Vehicle
-  mayDelete: boolean
   onChanged: () => void
 }) {
   const update = useMutation((status: VehicleStatus) => vehicles.update(vehicle.id, { status }))
@@ -129,7 +123,7 @@ function VehicleRow({ vehicle, mayDelete, onChanged }: {
 
   return (
     <Row>
-      <Cell className="font-bold">{vehicle.prefix}</Cell>
+      <Cell className="font-semibold">{vehicle.prefix}</Cell>
       <Cell title={VEHICLE_TYPE_LABEL[vehicle.type]}>{vehicle.type}</Cell>
       <Cell className="font-mono text-sm">{vehicle.plate}</Cell>
       <Cell>{vehicle.model}</Cell>
@@ -148,24 +142,22 @@ function VehicleRow({ vehicle, mayDelete, onChanged }: {
             className="py-1 text-sm"
           />
         )}
-        {update.error && <span className="mt-1 block text-sm text-[#DE5656]">{update.error}</span>}
+        {update.error && <span className="mt-1 block text-sm text-alert">{update.error}</span>}
       </Cell>
 
-      {mayDelete && (
-        <Cell>
-          <ConfirmButton
-            label="Excluir"
-            confirmLabel="Confirmar"
-            className="px-2.5 py-1 text-sm"
-            disabled={remove.submitting || locked}
-            onConfirm={async () => {
-              const done = await remove.run(undefined)
-              if (done) onChanged()
-            }}
-          />
-          {remove.error && <span className="mt-1 block max-w-xs text-sm text-[#DE5656]">{remove.error}</span>}
-        </Cell>
-      )}
+      <Cell>
+        <ConfirmButton
+          label="Excluir"
+          confirmLabel="Confirmar"
+          className="px-2.5 py-1 text-sm"
+          disabled={remove.submitting || locked}
+          onConfirm={async () => {
+            const done = await remove.run(undefined)
+            if (done) onChanged()
+          }}
+        />
+        {remove.error && <span className="mt-1 block max-w-xs text-sm text-alert">{remove.error}</span>}
+      </Cell>
     </Row>
   )
 }

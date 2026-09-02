@@ -8,23 +8,23 @@ import { DeleteFirefighterController } from "../controllers/firefighter/delete-f
 
 export async function firefighterRoutes(fastify: FastifyTypedInstance, plugins: FastifyPluginOptions) {
 
-  fastify.get("/", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new ListFirefightersController().handle(req, rep)
   })
 
-  fastify.get("/:id", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new GetFirefighterController().handle(req, rep)
   })
 
-  fastify.post("/", { onRequest: [fastify.authorize(["ADMIN", "COMANDANTE"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.post("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new CreateFirefighterController().handle(req, rep)
   })
 
-  fastify.patch("/:id", { onRequest: [fastify.authorize(["ADMIN", "COMANDANTE"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.patch("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new UpdateFirefighterController().handle(req, rep)
   })
 
-  fastify.delete("/:id", { onRequest: [fastify.authorize(["ADMIN"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.delete("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new DeleteFirefighterController().handle(req, rep)
   })
 }

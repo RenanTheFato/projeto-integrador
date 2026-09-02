@@ -30,19 +30,19 @@
           background: transparent; color: rgba(255,255,255,.66);
           display: flex; align-items: center; gap: 6px; white-space: nowrap;
         }
-        .toggle-wrap button.active { background: #E53935; color: #fff; }
+        .toggle-wrap button.active { background: #0B63A5; color: #fff; }
         .toggle-wrap button:hover:not(.active) {
           background: rgba(255,255,255,.12); color: #fff;
         }
 
-        /* The comparison toggle wears the colour of the line it controls —
-           blue, like the dashed shortest-in-metres route — instead of the red
-           the 2D/3D pair uses for the neural one. The swatch and the wording
+        /* The comparison toggle wears the colour of the line it controls — the
+           grey of the dashed shortest-in-metres baseline — while the 2D/3D
+           pair wears the accent of the neural route. The swatch and the wording
            both change with the state so the polarity reads at a glance. */
         .toggle-wrap button.compare { color: rgba(255,255,255,.7); }
-        .toggle-wrap button.compare.active { background: #1565C0; color: #fff; }
+        .toggle-wrap button.compare.active { background: #64748B; color: #fff; }
         .toggle-wrap button.compare:hover:not(.active) {
-          background: rgba(21,101,192,.28); color: #fff;
+          background: rgba(100,116,139,.32); color: #fff;
         }
         .compare-swatch {
           width: 16px; height: 0;
@@ -87,8 +87,8 @@
           transition: background .15s, color .15s; white-space: nowrap;
         }
         .cam-option:hover    { background: rgba(255,255,255,.07); color: #fff; }
-        .cam-option.selected { color: #fff; background: rgba(229,57,53,.18); }
-        .cam-option.selected svg { color: #E53935; }
+        .cam-option.selected { color: #fff; background: rgba(11,99,165,.24); }
+        .cam-option.selected svg { color: #4EA8F0; }
 
         .map-hint {
           position: absolute; bottom: 14px; left: 50%;

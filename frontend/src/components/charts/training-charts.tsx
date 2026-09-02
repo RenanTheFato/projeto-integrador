@@ -38,14 +38,14 @@ import type { TrainingPoint, TrainingRun } from "@/api/types"
 import { formatLoss } from "@/lib/format"
 import { useMeasure } from "@/hooks/use-measure"
 
-const TRAIN_COLOR = "#DE5656"
-const VALIDATION_COLOR = "#1565C0"
-const CONTEXT_COLOR = "#D4D4D4"
-const GRID_COLOR = "#E5E5E5"
-const AXIS_INK = "#737373"
-const INK = "#171717"
+const TRAIN_COLOR = "#A32A20"
+const VALIDATION_COLOR = "#0B63A5"
+const CONTEXT_COLOR = "#CBD5E1"
+const GRID_COLOR = "#E4E9EF"
+const AXIS_INK = "#8496A5"
+const INK = "#0F1922"
 const SURFACE = "#FFFFFF"
-const GOAL_COLOR = "#525252"
+const GOAL_COLOR = "#55636F"
 
 const CURVE_HEIGHT = 300
 const BARS_HEIGHT = 250
@@ -98,10 +98,10 @@ function Legend({ items }: {
   return (
     <ul className="flex flex-wrap items-center gap-x-5 gap-y-1">
       {items.map((item) => (
-        <li key={item.label} className="flex items-center gap-2 text-sm text-neutral-600">
+        <li key={item.label} className="flex items-center gap-2 text-sm text-ink-muted">
           {item.swatch ? (
             <span
-              className="h-3 w-4 shrink-0 border border-neutral-200"
+              className="h-3 w-4 shrink-0 border border-line"
               style={{ background: item.color, opacity: 0.35 }}
             />
           ) : (
@@ -131,8 +131,8 @@ function ChartFrame({ title, note, children }: {
   return (
     <figure className="flex flex-col gap-3">
       <figcaption>
-        <p className="font-semibold text-neutral-900">{title}</p>
-        {note && <p className="text-sm text-neutral-500">{note}</p>}
+        <p className="font-semibold text-ink">{title}</p>
+        {note && <p className="text-sm text-ink-soft">{note}</p>}
       </figcaption>
       {children}
     </figure>
@@ -141,7 +141,7 @@ function ChartFrame({ title, note, children }: {
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <p className="border border-dashed border-neutral-300 bg-[#F5EFE6] px-4 py-6 text-center text-neutral-600">
+    <p className="border border-dashed border-line bg-surface-muted px-4 py-6 text-center text-ink-muted">
       {children}
     </p>
   )
@@ -153,10 +153,10 @@ function TooltipRow({ color, label, value }: { color: string, label: string, val
       <svg width="14" height="8" aria-hidden className="shrink-0">
         <line x1="0" y1="4" x2="14" y2="4" stroke={color} strokeWidth={2.5} strokeLinecap="round" />
       </svg>
-      <strong className="font-bold text-neutral-900" style={{ fontVariantNumeric: "tabular-nums" }}>
+      <strong className="font-semibold text-ink" style={{ fontVariantNumeric: "tabular-nums" }}>
         {value}
       </strong>
-      <span className="text-sm text-neutral-500">{label}</span>
+      <span className="text-sm text-ink-soft">{label}</span>
     </p>
   )
 }
@@ -325,7 +325,7 @@ export function LossCurve({ run, previous }: { run: TrainingRun, previous: Train
                 <rect
                   x={x(last.epoch)} y={PADDING.top}
                   width={Math.max(0, x(maxEpoch) - x(last.epoch))} height={plotHeight}
-                  fill="#F5EFE6" opacity={0.75}
+                  fill="#F3F6F9" opacity={0.85}
                 />
                 <line
                   x1={x(last.epoch)} y1={PADDING.top}
@@ -425,14 +425,14 @@ export function LossCurve({ run, previous }: { run: TrainingRun, previous: Train
 
         {hovered && width > 0 && (
           <div
-            className="pointer-events-none absolute top-3 z-10 min-w-44 border border-neutral-300 bg-white px-3 py-2 shadow-lg"
+            className="pointer-events-none absolute top-3 z-10 min-w-44 border border-line bg-surface px-3 py-2 shadow-lg"
             style={{ left: Math.min(Math.max(x(hovered.epoch) - 80, 0), Math.max(width - 176, 0)) }}
           >
-            <p className="text-sm text-neutral-500">Época {hovered.epoch}</p>
+            <p className="text-sm text-ink-soft">Época {hovered.epoch}</p>
             <TooltipRow color={TRAIN_COLOR} label="Treino" value={formatLoss(hovered.train_loss)} />
             <TooltipRow color={VALIDATION_COLOR} label="Validação" value={formatLoss(hovered.validation_loss)} />
             {hovered.train_loss !== null && hovered.validation_loss !== null && (
-              <p className="mt-1 text-sm text-neutral-500">
+              <p className="mt-1 text-sm text-ink-soft">
                 Distância {formatLoss(Math.abs(hovered.validation_loss - hovered.train_loss))}
               </p>
             )}
@@ -441,29 +441,29 @@ export function LossCurve({ run, previous }: { run: TrainingRun, previous: Train
       </div>
 
       {stoppedEarly && (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ink-soft">
           A corrida parou na época {last.epoch} das {run.epochs} pedidas — a área clara à direita
           é o que o <em>early stopping</em> dispensou quando a loss de validação deixou de
           melhorar.
         </p>
       )}
 
-      <details className="text-sm text-neutral-600">
-        <summary className="cursor-pointer font-semibold text-neutral-700">Ver os números</summary>
+      <details className="text-sm text-ink-muted">
+        <summary className="cursor-pointer font-semibold text-ink-muted">Ver os números</summary>
 
         <div className="mt-2 max-h-64 overflow-y-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-neutral-300 text-xs uppercase tracking-wide text-neutral-500">
-                <th className="py-1 pr-3 font-bold">Época</th>
-                <th className="py-1 pr-3 font-bold">Treino</th>
-                <th className="py-1 pr-3 font-bold">Validação</th>
-                <th className="py-1 font-bold">Melhor</th>
+              <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft">
+                <th className="py-1 pr-3 font-semibold">Época</th>
+                <th className="py-1 pr-3 font-semibold">Treino</th>
+                <th className="py-1 pr-3 font-semibold">Validação</th>
+                <th className="py-1 font-semibold">Melhor</th>
               </tr>
             </thead>
             <tbody style={{ fontVariantNumeric: "tabular-nums" }}>
               {points.map((point) => (
-                <tr key={point.epoch} className="border-b border-neutral-200">
+                <tr key={point.epoch} className="border-b border-line">
                   <td className="py-1 pr-3">{point.epoch}</td>
                   <td className="py-1 pr-3">{formatLoss(point.train_loss)}</td>
                   <td className="py-1 pr-3">{formatLoss(point.validation_loss)}</td>
@@ -612,10 +612,10 @@ export function RunComparison({ runs, threshold, onSelect, selectedId }: {
 
           return (
             <div
-              className="pointer-events-none absolute top-2 z-10 min-w-48 border border-neutral-300 bg-white px-3 py-2 shadow-lg"
+              className="pointer-events-none absolute top-2 z-10 min-w-48 border border-line bg-surface px-3 py-2 shadow-lg"
               style={{ left: Math.min(Math.max(centre - 96, 0), Math.max(width - 192, 0)) }}
             >
-              <p className="text-sm text-neutral-500">
+              <p className="text-sm text-ink-soft">
                 {fullDate(entry.run.finished_at ?? entry.run.created_at)} · {entry.run.epochs} épocas
                 {minutes !== null && ` · ${Math.round(minutes)} min`}
               </p>
@@ -769,16 +769,16 @@ export function EpochsVsQuality({ runs, threshold, selectedId, onSelect }: {
 
           return (
             <div
-              className="pointer-events-none absolute top-2 z-10 min-w-48 border border-neutral-300 bg-white px-3 py-2 shadow-lg"
+              className="pointer-events-none absolute top-2 z-10 min-w-48 border border-line bg-surface px-3 py-2 shadow-lg"
               style={{
                 left: Math.min(Math.max(x(point.run.epochs) - 96, 0), Math.max(width - 192, 0)),
               }}
             >
-              <p className="text-sm text-neutral-500">
+              <p className="text-sm text-ink-soft">
                 {fullDate(point.run.finished_at ?? point.run.created_at)}
               </p>
               <TooltipRow color={VALIDATION_COLOR} label="melhor validação" value={formatLoss(point.value)} />
-              <p className="text-sm text-neutral-500">
+              <p className="text-sm text-ink-soft">
                 {point.run.epochs} épocas
                 {point.minutes !== null && ` · ${Math.round(point.minutes)} min de treino`}
               </p>
@@ -853,12 +853,12 @@ export function ConvergenceSpeed({ runs, threshold }: {
         {entries.map((entry) => (
           <li key={entry.run.id} className="flex flex-col gap-1">
             <div className="flex items-baseline justify-between gap-3">
-              <span className="text-neutral-800">
+              <span className="text-ink">
                 {fullDate(entry.run.finished_at ?? entry.run.created_at)}
-                <span className="ml-2 text-sm text-neutral-500">{entry.run.epochs} épocas</span>
+                <span className="ml-2 text-sm text-ink-soft">{entry.run.epochs} épocas</span>
               </span>
               <strong
-                className="shrink-0 font-bold text-neutral-900"
+                className="shrink-0 font-semibold text-ink"
                 style={{ fontVariantNumeric: "tabular-nums" }}
               >
                 {entry.epoch === null ? "não atingiu" : `${entry.epoch} épocas`}

@@ -112,21 +112,21 @@ function DispatchRow({ dispatch, onChanged }: { dispatch: Dispatch, onChanged: (
   return (
     <Row>
       <Cell>
-        <span className="font-bold">{dispatch.vehicle?.prefix ?? "—"}</span>
+        <span className="font-semibold">{dispatch.vehicle?.prefix ?? "—"}</span>
         {dispatch.vehicle && (
-          <span className="block text-sm text-neutral-600">{VEHICLE_TYPE_LABEL[dispatch.vehicle.type]}</span>
+          <span className="block text-sm text-ink-muted">{VEHICLE_TYPE_LABEL[dispatch.vehicle.type]}</span>
         )}
       </Cell>
 
       <Cell>
         {dispatch.occurrence ? (
-          <Link to={`/ocorrencias/${dispatch.occurrence.id}`} className="font-semibold text-[#DE5656] hover:underline">
+          <Link to={`/ocorrencias/${dispatch.occurrence.id}`} className="font-semibold text-accent hover:underline">
             {dispatch.occurrence.protocol}
           </Link>
         ) : "—"}
         {dispatch.occurrence && (
           <>
-            <span className="block text-sm text-neutral-700">{NATURE_LABEL[dispatch.occurrence.nature]}</span>
+            <span className="block text-sm text-ink-muted">{NATURE_LABEL[dispatch.occurrence.nature]}</span>
             <span className={`block text-sm font-semibold ${PRIORITY_TEXT_TONE[dispatch.occurrence.priority]}`}>
               {PRIORITY_LABEL[dispatch.occurrence.priority]}
             </span>
@@ -136,7 +136,7 @@ function DispatchRow({ dispatch, onChanged }: { dispatch: Dispatch, onChanged: (
 
       <Cell>
         <Badge tone={DISPATCH_STATUS_TONE[dispatch.status]}>{DISPATCH_STATUS_LABEL[dispatch.status]}</Badge>
-        {advance.error && <span className="mt-1 block text-sm text-[#DE5656]">{advance.error}</span>}
+        {advance.error && <span className="mt-1 block text-sm text-alert">{advance.error}</span>}
       </Cell>
 
       <Cell className="whitespace-nowrap">{formatDateTime(dispatch.dispatched_at)}</Cell>
@@ -145,9 +145,9 @@ function DispatchRow({ dispatch, onChanged }: { dispatch: Dispatch, onChanged: (
         {neural ? (
           <>
             <span className="font-semibold">{formatDuration(neural.estimated_time_seconds)}</span>
-            <span className="block text-sm text-neutral-600">{formatDistance(neural.distance_meters)}</span>
+            <span className="block text-sm text-ink-muted">{formatDistance(neural.distance_meters)}</span>
           </>
-        ) : <span className="text-neutral-500">sem rota</span>}
+        ) : <span className="text-ink-soft">sem rota</span>}
       </Cell>
 
       <Cell>
@@ -163,7 +163,7 @@ function DispatchRow({ dispatch, onChanged }: { dispatch: Dispatch, onChanged: (
               {DISPATCH_STATUS_LABEL[status]}
             </ActionButton>
           ))}
-          {next.length === 0 && <span className="text-sm text-neutral-500">encerrado</span>}
+          {next.length === 0 && <span className="text-sm text-ink-soft">encerrado</span>}
         </div>
       </Cell>
     </Row>

@@ -11,22 +11,17 @@ import type { FormEvent } from "react"
 import { Plus, ShieldCheck, Users } from "lucide-react"
 
 import { crews, firefighters, units, vehicles } from "@/api/endpoints"
-import { CREW_ROLE_LABEL, RANK_LABEL, optionsOf } from "@/api/labels"
+import { CREW_ROLE_LABEL, RANK_LABEL, TONE, optionsOf } from "@/api/labels"
 import type { Crew, CrewRole } from "@/api/types"
 import {
   ActionButton, Badge, Cell, ConfirmButton, Field, Modal, Page, PageHeader, Pagination,
   Panel, Row, Select, Table, TextInput,
 } from "@/components/layout/kit"
 import { EmptyState, ErrorBox, ErrorDetails, LoadingBlock } from "@/components/layout/feedback"
-import { useAuth } from "@/auth/auth-context"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatDateTime, toLocalInputValue } from "@/lib/format"
 
 export default function Guarnicoes() {
-  const { can } = useAuth()
-  const mayManage = can(["ADMIN", "COMANDANTE"])
-  const mayDelete = can(["ADMIN"])
-
   const [page, setPage] = useState(1)
   const [onlyActive, setOnlyActive] = useState("true")
   const [creating, setCreating] = useState(false)
@@ -41,7 +36,7 @@ export default function Guarnicoes() {
       <PageHeader
         title="Guarnições"
         subtitle="Composição das equipes por viatura"
-        actions={mayManage && (
+        actions={(
           <ActionButton tone="primary" onClick={() => setCreating(true)}>
             <Plus className="h-5 w-5" />
             Nova guarnição
@@ -72,10 +67,10 @@ export default function Guarnicoes() {
         <Panel title="Guarnições" icon={<ShieldCheck className="h-5 w-5" />}>
           <Table headers={[
             "Guarnição", "Viatura", "Comandante", "Integrantes", "Início", "Situação",
-            ...(mayDelete ? ["Ações"] : []),
+            "Ações",
           ]}>
             {list.data.items.map((crew) => (
-              <CrewRow key={crew.id} crew={crew} mayDelete={mayDelete} onChanged={list.reload} />
+              <CrewRow key={crew.id} crew={crew} onChanged={list.reload} />
             ))}
           </Table>
 
@@ -93,16 +88,15 @@ export default function Guarnicoes() {
   )
 }
 
-function CrewRow({ crew, mayDelete, onChanged }: {
+function CrewRow({ crew, onChanged }: {
   crew: Crew
-  mayDelete: boolean
   onChanged: () => void
 }) {
   const remove = useMutation(() => crews.remove(crew.id))
 
   return (
     <Row>
-      <Cell className="font-bold">{crew.name}</Cell>
+      <Cell className="font-semibold">{crew.name}</Cell>
       <Cell>{crew.vehicle?.prefix ?? "—"}</Cell>
       <Cell>
         {crew.commander ? `${RANK_LABEL[crew.commander.rank]} ${crew.commander.war_name}` : "—"}
@@ -110,36 +104,34 @@ function CrewRow({ crew, mayDelete, onChanged }: {
       <Cell>
         <div className="flex flex-wrap gap-1">
           {(crew.members ?? []).map((member) => (
-            <span key={member.id} className="border border-neutral-300 px-2 py-0.5 text-sm">
+            <span key={member.id} className="border border-line px-2 py-0.5 text-sm">
               {member.firefighter?.war_name ?? "—"}
-              <span className="text-neutral-500"> · {CREW_ROLE_LABEL[member.role]}</span>
+              <span className="text-ink-soft"> · {CREW_ROLE_LABEL[member.role]}</span>
             </span>
           ))}
-          {(crew.members ?? []).length === 0 && <span className="text-neutral-500">—</span>}
+          {(crew.members ?? []).length === 0 && <span className="text-ink-soft">—</span>}
         </div>
       </Cell>
       <Cell className="whitespace-nowrap">{formatDateTime(crew.started_at)}</Cell>
       <Cell>
-        <Badge tone={crew.active ? "bg-green-600" : "bg-neutral-500"}>
+        <Badge tone={crew.active ? TONE.ok : TONE.off}>
           {crew.active ? "Em serviço" : "Encerrada"}
         </Badge>
       </Cell>
 
-      {mayDelete && (
-        <Cell>
-          <ConfirmButton
-            label="Excluir"
-            confirmLabel="Confirmar"
-            className="px-2.5 py-1 text-sm"
-            disabled={remove.submitting}
-            onConfirm={async () => {
-              const done = await remove.run(undefined)
-              if (done) onChanged()
-            }}
-          />
-          {remove.error && <span className="mt-1 block max-w-xs text-sm text-[#DE5656]">{remove.error}</span>}
-        </Cell>
-      )}
+      <Cell>
+        <ConfirmButton
+          label="Excluir"
+          confirmLabel="Confirmar"
+          className="px-2.5 py-1 text-sm"
+          disabled={remove.submitting}
+          onConfirm={async () => {
+            const done = await remove.run(undefined)
+            if (done) onChanged()
+          }}
+        />
+        {remove.error && <span className="mt-1 block max-w-xs text-sm text-alert">{remove.error}</span>}
+      </Cell>
     </Row>
   )
 }
@@ -249,9 +241,9 @@ function CreateCrewModal({ onClose, onCreated }: { onClose: () => void, onCreate
           </Field>
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-neutral-200 pt-3">
+        <div className="flex flex-col gap-2 border-t border-line pt-3">
           <div className="flex items-center justify-between">
-            <p className="flex items-center gap-2 font-bold text-neutral-900">
+            <p className="flex items-center gap-2 font-semibold text-ink">
               <Users className="h-5 w-5" />
               Integrantes
             </p>

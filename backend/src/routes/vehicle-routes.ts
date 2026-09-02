@@ -8,24 +8,24 @@ import { DeleteVehicleController } from "../controllers/vehicle/delete-vehicle-c
 
 export async function vehicleRoutes(fastify: FastifyTypedInstance, plugins: FastifyPluginOptions) {
 
-  fastify.get("/", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new ListVehiclesController().handle(req, rep)
   })
 
-  fastify.get("/:id", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new GetVehicleController().handle(req, rep)
   })
 
-  fastify.post("/", { onRequest: [fastify.authorize(["ADMIN", "COMANDANTE"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.post("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new CreateVehicleController().handle(req, rep)
   })
 
-  // Dispatchers update status and live position, so OPERADOR is allowed here.
-  fastify.patch("/:id", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  // Status and live position are driven straight from the dispatch console.
+  fastify.patch("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new UpdateVehicleController().handle(req, rep)
   })
 
-  fastify.delete("/:id", { onRequest: [fastify.authorize(["ADMIN"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.delete("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new DeleteVehicleController().handle(req, rep)
   })
 }

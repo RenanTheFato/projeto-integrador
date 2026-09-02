@@ -8,23 +8,23 @@ import { DeleteCrewController } from "../controllers/crew/delete-crew-controller
 
 export async function crewRoutes(fastify: FastifyTypedInstance, plugins: FastifyPluginOptions) {
 
-  fastify.get("/", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new ListCrewsController().handle(req, rep)
   })
 
-  fastify.get("/:id", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new GetCrewController().handle(req, rep)
   })
 
-  fastify.post("/", { onRequest: [fastify.authorize(["ADMIN", "COMANDANTE"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.post("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new CreateCrewController().handle(req, rep)
   })
 
-  fastify.patch("/:id", { onRequest: [fastify.authorize(["ADMIN", "COMANDANTE"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.patch("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new UpdateCrewController().handle(req, rep)
   })
 
-  fastify.delete("/:id", { onRequest: [fastify.authorize(["ADMIN"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.delete("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new DeleteCrewController().handle(req, rep)
   })
 }

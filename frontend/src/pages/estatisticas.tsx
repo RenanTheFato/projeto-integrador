@@ -161,7 +161,7 @@ export default function Estatisticas() {
         latitude,
         longitude,
         unitLabel: acronym,
-        unitColor: unitColor.get(acronym) ?? "#525252",
+        unitColor: unitColor.get(acronym) ?? "#55636F",
       }]
     }),
     [items, unitColor],
@@ -367,7 +367,7 @@ export default function Estatisticas() {
   const legendUnits = useMemo(
     () => responders.map((entry) => ({
       label: entry.label,
-      color: unitColor.get(entry.label) ?? "#525252",
+      color: unitColor.get(entry.label) ?? "#55636F",
     })),
     [responders, unitColor],
   )
@@ -414,7 +414,7 @@ export default function Estatisticas() {
           </Field>
         </div>
 
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-ink-muted">
           {all.loading
             ? "Levantando as ocorrências..."
             : `${items.length.toLocaleString("pt-BR")} ocorrência${items.length === 1 ? "" : "s"} no recorte`}
@@ -422,7 +422,7 @@ export default function Estatisticas() {
         </p>
 
         {all.data?.truncated && (
-          <p className="border border-[#E8A240] bg-[#E8A240]/15 px-4 py-2 text-neutral-900">
+          <p className="rounded-sm border border-warn/30 bg-warn-soft px-4 py-2 text-ink">
             O recorte tem {all.data.total.toLocaleString("pt-BR")} ocorrências e a tela carrega
             até mil. Os números abaixo cobrem as mais recentes — estreite o período para um
             retrato exato.
@@ -490,7 +490,7 @@ export default function Estatisticas() {
           className="h-[58vh] max-h-[700px] min-h-[380px] w-full"
         />
 
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-ink-muted">
           {MAP_NOTE[mapMode]} Os quartéis aparecem nos quatro modos.
         </p>
       </Panel>
@@ -507,7 +507,7 @@ export default function Estatisticas() {
       <Panel title="Quando os chamados chegam" icon={<Clock className="h-5 w-5" />}>
         <HeatGrid rows={WEEKDAYS} values={byWeekdayHour} />
 
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ink-soft">
           Cada célula é um dia da semana cruzado com uma hora do dia. É a distribuição que diz
           em que turno o efetivo precisa estar mais forte — uma noite de sábado e uma noite de
           terça não são a mesma noite.
@@ -518,7 +518,7 @@ export default function Estatisticas() {
 
       <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
         <Panel title="Onde mais acontece" icon={<TrendingUp className="h-5 w-5" />}>
-          <p className="text-sm text-neutral-500">Bairros com mais chamados no recorte.</p>
+          <p className="text-sm text-ink-soft">Bairros com mais chamados no recorte.</p>
           <Ranking
             items={districts.slice(0, RANKING_SIZE)}
             emptyMessage="Nenhuma ocorrência no recorte."
@@ -526,7 +526,7 @@ export default function Estatisticas() {
         </Panel>
 
         <Panel title="Onde menos acontece" icon={<TrendingDown className="h-5 w-5" />}>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-ink-soft">
             A outra ponta da mesma lista — bairros que aparecem, mas raramente.
           </p>
           <Ranking
@@ -551,7 +551,7 @@ export default function Estatisticas() {
       </div>
 
       <Panel title="Endereços recorrentes" icon={<Repeat className="h-5 w-5" />}>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ink-soft">
           Endereços com {RECURRENCE_MINIMUM} chamados ou mais no recorte. São os pontos onde uma
           vistoria, uma obra ou uma conversa com outro órgão rende mais do que mais uma viatura.
         </p>
@@ -569,7 +569,7 @@ export default function Estatisticas() {
       </Panel>
 
       <Panel title="Tempo médio de resposta por natureza" icon={<Timer className="h-5 w-5" />}>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ink-soft">
           Minutos entre o chamado e a chegada da primeira viatura. Só entram as ocorrências cujo
           despacho registrou a chegada.
         </p>
@@ -623,10 +623,10 @@ const MAP_NOTE: Record<IncidentMapMode, string> = {
 
 function Tile({ label, value }: { label: string, value: number }) {
   return (
-    <div className="border bg-[#F5EFE6] px-4 py-3">
-      <p className="text-sm text-neutral-600">{label}</p>
+    <div className="rounded-sm border border-line bg-surface-muted px-4 py-3">
+      <p className="label-caps text-ink-soft">{label}</p>
       <p
-        className="text-2xl font-bold text-neutral-900"
+        className="text-2xl font-semibold text-ink"
         style={{ fontVariantNumeric: "tabular-nums" }}
       >
         {value}
@@ -658,14 +658,14 @@ function DeltaStat({ icon, label, value, hint, current, previous, moreIsBetter }
   const good = change === null ? null : moreIsBetter ? change > 0 : change < 0
 
   return (
-    <div className="flex flex-col gap-2 border bg-white px-4 py-4 sm:px-5">
-      <div className="flex items-center gap-2 text-neutral-700">
+    <div className="flex flex-col gap-1.5 rounded-sm border border-line bg-surface px-4 py-4 sm:px-5">
+      <div className="flex items-center gap-2 text-ink-muted">
         {icon}
-        <p className="text-lg">{label}</p>
+        <p className="label-caps">{label}</p>
       </div>
 
       <p
-        className="text-3xl font-bold text-neutral-900"
+        className="text-3xl font-semibold text-ink"
         style={{ fontVariantNumeric: "tabular-nums" }}
       >
         {value}
@@ -675,7 +675,7 @@ function DeltaStat({ icon, label, value, hint, current, previous, moreIsBetter }
         <p
           className={cn(
             "flex items-center gap-1 text-sm font-semibold",
-            good ? "text-green-700" : "text-[#DE5656]",
+            good ? "text-ok" : "text-alert",
           )}
         >
           {change > 0
@@ -685,7 +685,7 @@ function DeltaStat({ icon, label, value, hint, current, previous, moreIsBetter }
         </p>
       )}
 
-      {hint && <p className="text-sm text-neutral-500">{hint}</p>}
+      {hint && <p className="text-sm text-ink-soft">{hint}</p>}
     </div>
   )
 }

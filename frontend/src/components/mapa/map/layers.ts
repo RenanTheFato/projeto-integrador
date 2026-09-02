@@ -17,7 +17,7 @@ import { ROUTE_ALT, ROUTE_COLOR } from "@/components/mapa/constants/constants"
 import type { LngLat } from "@/components/mapa/routes/utils"
 import type { GraphBounds } from "@/api/types"
 
-const COMPARISON_COLOR = "#1565C0"
+const COMPARISON_COLOR = "#64748B"
 
 const FLAT_SOURCE = "src-flat"
 const LIFTED_SOURCE = "src-lifted"
@@ -147,7 +147,7 @@ export function addCoverageLayer(map: maplibregl.Map, bounds: GraphBounds | null
     source: COVERAGE_SOURCE,
     layout: { "line-cap": "square", "line-join": "miter" },
     paint: {
-      "line-color": "#4B5563",
+      "line-color": "#55636F",
       "line-width": 2,
       "line-opacity": 0.55,
       "line-dasharray": [4, 3],

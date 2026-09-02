@@ -53,10 +53,10 @@ const CLUSTER_LABEL = "recurrences-label"
  * legend names every step, so colour is never the only thing carrying it.
  */
 export const PRIORITY_COLOR: Record<OccurrencePriority, string> = {
-  BAIXA: "#16A34A",
-  MEDIA: "#E8A240",
-  ALTA: "#DE5656",
-  CRITICA: "#991B1B",
+  BAIXA: "#2F6A52",
+  MEDIA: "#8E600A",
+  ALTA: "#A32A20",
+  CRITICA: "#7C1D16",
 }
 
 /**
@@ -67,7 +67,7 @@ export const PRIORITY_COLOR: Record<OccurrencePriority, string> = {
  * Assigned in fixed order so a post keeps its colour when a filter removes
  * another one — a reader who learned "Quiririm is green" is not re-taught.
  */
-export const UNIT_COLORS = ["#1565C0", "#B06A12", "#7B3FA0", "#2E7D32", "#0F766E", "#9F1239"]
+export const UNIT_COLORS = ["#0B63A5", "#8E600A", "#6B4E9E", "#2F6A52", "#0E6E75", "#A32A20"]
 
 export interface IncidentPoint {
   id: string
@@ -211,10 +211,10 @@ export default function IncidentMap({
           "heatmap-color": [
             "interpolate", ["linear"], ["heatmap-density"],
             0, "rgba(255,255,255,0)",
-            0.2, "#FEE2E2",
-            0.45, "#FCA5A5",
-            0.7, "#EF4444",
-            1, "#991B1B",
+            0.2, "#F6E4E1",
+            0.45, "#DE9A90",
+            0.7, "#A32A20",
+            1, "#5E1410",
           ],
         },
       })
@@ -232,7 +232,7 @@ export default function IncidentMap({
             "MEDIA", PRIORITY_COLOR.MEDIA,
             "ALTA", PRIORITY_COLOR.ALTA,
             "CRITICA", PRIORITY_COLOR.CRITICA,
-            "#525252",
+            "#55636F",
           ],
           // The 2px surface ring keeps overlapping incidents legible.
           "circle-stroke-width": 2,
@@ -272,7 +272,7 @@ export default function IncidentMap({
             1, 9,
             5, 32,
           ],
-          "circle-color": "#DE5656",
+          "circle-color": "#A32A20",
           "circle-opacity": 0.55,
           "circle-stroke-width": 2,
           "circle-stroke-color": "#FFFFFF",
@@ -291,7 +291,7 @@ export default function IncidentMap({
         },
         paint: {
           "text-color": "#FFFFFF",
-          "text-halo-color": "#991B1B",
+          "text-halo-color": "#7C1D16",
           "text-halo-width": 1.2,
         },
       })
@@ -315,7 +315,7 @@ export default function IncidentMap({
       // Built as DOM rather than an HTML string: the protocol and the address
       // are user input and must never be parsed as markup.
       const node = document.createElement("div")
-      node.style.cssText = "font:13px/1.45 system-ui,sans-serif;color:#171717;min-width:190px"
+      node.style.cssText = "font:13px/1.45 system-ui,sans-serif;color:#0F1922;min-width:190px"
 
       if (kind === "cluster") {
         const count = document.createElement("p")
@@ -323,7 +323,7 @@ export default function IncidentMap({
         count.textContent = `${properties.count} ocorrências neste endereço`
 
         const label = document.createElement("p")
-        label.style.cssText = "margin:0;color:#525252"
+        label.style.cssText = "margin:0;color:#55636F"
         label.textContent = properties.label
 
         node.append(count, label)
@@ -338,17 +338,17 @@ export default function IncidentMap({
           ?? properties.nature
 
         const address = document.createElement("p")
-        address.style.cssText = "margin:0;color:#525252"
+        address.style.cssText = "margin:0;color:#55636F"
         address.textContent = properties.address
 
         const meta = document.createElement("p")
         meta.style.cssText = "margin:4px 0 0;font-weight:600"
-        meta.style.color = PRIORITY_COLOR[properties.priority as OccurrencePriority] ?? "#525252"
+        meta.style.color = PRIORITY_COLOR[properties.priority as OccurrencePriority] ?? "#55636F"
         meta.textContent =
           `Prioridade ${PRIORITY_LABEL[properties.priority as OccurrencePriority] ?? "—"}`
 
         const unit = document.createElement("p")
-        unit.style.cssText = "margin:0;color:#525252"
+        unit.style.cssText = "margin:0;color:#55636F"
         unit.textContent = `Atendida por ${properties.unitLabel}`
 
         node.append(protocol, nature, address, meta, unit)
@@ -357,7 +357,7 @@ export default function IncidentMap({
           const button = document.createElement("button")
           button.type = "button"
           button.style.cssText =
-            "margin-top:8px;font-weight:700;color:#DE5656;text-decoration:underline;"
+            "margin-top:8px;font-weight:700;color:#0B63A5;text-decoration:underline;"
             + "cursor:pointer;background:none;border:none;padding:0"
           button.textContent = "Abrir a ocorrência"
           button.addEventListener("click", () => openRef.current?.(properties.id))
@@ -550,11 +550,11 @@ export function IncidentLegend({ mode, units }: {
 }) {
   if (mode === "heat") {
     return (
-      <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-600">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
         <span>Menos</span>
         <span
-          className="h-3 w-24 border border-neutral-300"
-          style={{ background: "linear-gradient(90deg,#FEE2E2,#FCA5A5,#EF4444,#991B1B)" }}
+          className="h-3 w-24 border border-line"
+          style={{ background: "linear-gradient(90deg,#F6E4E1,#DE9A90,#A32A20,#5E1410)" }}
         />
         <span>Mais ocorrências</span>
       </div>
@@ -563,7 +563,7 @@ export function IncidentLegend({ mode, units }: {
 
   if (mode === "recurrence") {
     return (
-      <p className="text-sm text-neutral-600">
+      <p className="text-sm text-ink-muted">
         O círculo cresce com o número de chamados no mesmo endereço.
       </p>
     )
@@ -571,7 +571,7 @@ export function IncidentLegend({ mode, units }: {
 
   if (mode === "coverage") {
     return (
-      <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-neutral-600">
+      <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted">
         {(units ?? []).map((unit) => (
           <li key={unit.label} className="flex items-center gap-1.5">
             <span
@@ -586,7 +586,7 @@ export function IncidentLegend({ mode, units }: {
   }
 
   return (
-    <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-neutral-600">
+    <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted">
       {(Object.keys(PRIORITY_COLOR) as OccurrencePriority[]).map((priority) => (
         <li key={priority} className="flex items-center gap-1.5">
           <span

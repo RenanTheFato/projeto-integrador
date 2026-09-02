@@ -1,9 +1,11 @@
 /**
  * The icon that identifies a nature of occurrence.
  *
- * The first version of the interface put a lucide icon inside a white circle
- * over the severity colour; that pairing is kept, only driven by the enum the
- * backend sends instead of being written by hand per card.
+ * The icon sits in a neutral disc and takes the severity colour on its stroke,
+ * rather than being punched white out of a coloured tile. A list of fifteen
+ * calls then carries fifteen small marks instead of fifteen coloured slabs, and
+ * severity still reads from across the room because the disc is paired with the
+ * rail down the side of the row.
  */
 
 import {
@@ -33,17 +35,18 @@ export function OccurrenceIcon({ nature, className }: { nature: OccurrenceNature
   return <Icon className={cn("h-6 w-6", className)} />
 }
 
-/** The icon in its white circle, as the original cards showed it. */
-export function OccurrenceAvatar({ nature, size = "md" }: {
+export function OccurrenceAvatar({ nature, size = "md", tone = "text-ink-muted" }: {
   nature: OccurrenceNature
   size?: "sm" | "md" | "lg"
+  /** A `PRIORITY_TEXT_TONE` class, so the mark carries the severity too. */
+  tone?: string
 }) {
-  const box = size === "lg" ? "h-20 w-20" : size === "sm" ? "h-11 w-11" : "h-14 w-14"
-  const icon = size === "lg" ? "h-11 w-11" : size === "sm" ? "h-6 w-6" : "h-8 w-8"
+  const box = size === "lg" ? "h-16 w-16" : size === "sm" ? "h-10 w-10" : "h-12 w-12"
+  const icon = size === "lg" ? "h-8 w-8" : size === "sm" ? "h-5 w-5" : "h-6 w-6"
 
   return (
-    <div className={cn("flex shrink-0 items-center justify-center rounded-full border bg-white", box)}>
-      <OccurrenceIcon nature={nature} className={icon} />
+    <div className={cn("flex shrink-0 items-center justify-center rounded-full border border-line bg-surface-muted", box)}>
+      <OccurrenceIcon nature={nature} className={cn(icon, tone)} />
     </div>
   )
 }

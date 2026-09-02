@@ -14,7 +14,7 @@ import { Link } from "react-router-dom"
 import { ai, occurrences, units } from "@/api/endpoints"
 import {
   NATURE_LABEL, OCCURRENCE_STATUS_LABEL, OCCURRENCE_STATUS_TONE,
-  PRIORITY_LABEL, PRIORITY_TONE, optionsOf,
+  PRIORITY_LABEL, PRIORITY_TEXT_TONE, PRIORITY_TONE, optionsOf,
 } from "@/api/labels"
 import type { Occurrence, OccurrenceNature, OccurrencePriority, OccurrenceStatus } from "@/api/types"
 import {
@@ -159,15 +159,23 @@ function OccurrenceCard({ occurrence }: { occurrence: Occurrence }) {
   return (
     <Link
       to={`/ocorrencias/${occurrence.id}`}
-      className="flex flex-col border bg-white transition hover:shadow-lg sm:flex-row"
+      className="flex flex-col rounded-sm border border-line bg-surface transition-colors hover:border-accent/50 hover:bg-accent-soft sm:flex-row"
     >
-      <div className={`flex items-center gap-3 px-4 py-4 sm:gap-4 sm:px-5 ${PRIORITY_TONE[occurrence.priority]} min-w-0 flex-1`}>
-        <OccurrenceAvatar nature={occurrence.nature} />
+      {/* Severity is a rail, not a fill. Fifteen filled cards is a wall of
+          colour that says nothing; fifteen rails are a column the eye can run
+          down and find the worst call in. */}
+      <span
+        aria-hidden
+        className={`h-1.5 w-full shrink-0 sm:h-auto sm:w-1.5 ${PRIORITY_TONE[occurrence.priority]}`}
+      />
+
+      <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-5">
+        <OccurrenceAvatar nature={occurrence.nature} tone={PRIORITY_TEXT_TONE[occurrence.priority]} />
 
         <div className="min-w-0">
-          <p className="truncate text-lg font-bold text-white">{NATURE_LABEL[occurrence.nature]}</p>
-          <p className="truncate text-white/90">{occurrence.address}</p>
-          <p className="text-sm text-white/80">
+          <p className="truncate font-semibold text-ink">{NATURE_LABEL[occurrence.nature]}</p>
+          <p className="truncate text-sm text-ink-muted">{occurrence.address}</p>
+          <p className="text-xs text-ink-soft">
             {formatShort(occurrence.opened_at)} — {formatElapsed(occurrence.opened_at)}
           </p>
         </div>
@@ -175,12 +183,12 @@ function OccurrenceCard({ occurrence }: { occurrence: Occurrence }) {
 
       {/* On a phone the protocol column sits under the card instead of
           squeezing the address into a couple of characters. */}
-      <div className="flex w-full shrink-0 flex-row items-center justify-between gap-2 border-t px-4 py-3 sm:w-40 sm:flex-col sm:justify-center sm:border-l sm:border-t-0 sm:px-3 sm:py-4">
-        <span className="font-mono text-sm text-neutral-600">{occurrence.protocol}</span>
+      <div className="flex w-full shrink-0 flex-row items-center justify-between gap-2 border-t border-line px-4 py-3 sm:w-44 sm:flex-col sm:items-end sm:justify-center sm:border-l sm:border-t-0 sm:px-4 sm:py-4">
+        <span className="font-mono text-xs text-ink-soft">{occurrence.protocol}</span>
         <Badge tone={OCCURRENCE_STATUS_TONE[occurrence.status]}>
           {OCCURRENCE_STATUS_LABEL[occurrence.status]}
         </Badge>
-        <span className="text-sm font-semibold text-neutral-700">
+        <span className={`label-caps ${PRIORITY_TEXT_TONE[occurrence.priority]}`}>
           {PRIORITY_LABEL[occurrence.priority]}
         </span>
       </div>
@@ -304,19 +312,19 @@ function CreateOccurrenceModal({ onClose, onCreated }: { onClose: () => void, on
         />
 
         {nearest && (
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border border-[#1565C0] bg-[#1565C0]/10 px-4 py-2 text-neutral-900">
-            <MapPin className="h-4 w-4 shrink-0 text-[#1565C0]" />
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-accent/30 bg-accent-soft px-4 py-2 text-ink">
+            <MapPin className="h-4 w-4 shrink-0 text-accent" />
             <span>
               Quartel mais próximo do local: <strong>{nearest.item.acronym}</strong> —{" "}
               {nearest.item.name}, a {formatDistance(nearest.meters)} em linha reta.
             </span>
             {nearest.item.id === unitId
-              ? <span className="text-sm font-semibold text-[#1565C0]">Já é a unidade responsável.</span>
+              ? <span className="text-sm font-semibold text-accent">Já é a unidade responsável.</span>
               : (
                 <button
                   type="button"
                   onClick={() => setUnitId(nearest.item.id)}
-                  className="text-sm font-semibold text-[#1565C0] underline underline-offset-2 hover:text-[#0f4c8f]"
+                  className="text-sm font-semibold text-accent underline underline-offset-2 hover:text-accent-strong"
                 >
                   Definir como unidade responsável
                 </button>

@@ -20,15 +20,10 @@ import {
   Panel, Row, Select, Table, TextInput,
 } from "@/components/layout/kit"
 import { EmptyState, ErrorBox, ErrorDetails, LoadingBlock } from "@/components/layout/feedback"
-import { useAuth } from "@/auth/auth-context"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatDate } from "@/lib/format"
 
 export default function Efetivo() {
-  const { can } = useAuth()
-  const mayManage = can(["ADMIN", "COMANDANTE"])
-  const mayDelete = can(["ADMIN"])
-
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState("")
   const [unitId, setUnitId] = useState("")
@@ -51,7 +46,7 @@ export default function Efetivo() {
       <PageHeader
         title="Efetivo"
         subtitle="Bombeiros cadastrados por unidade"
-        actions={mayManage && (
+        actions={(
           <ActionButton tone="primary" onClick={() => setCreating(true)}>
             <Plus className="h-5 w-5" />
             Novo bombeiro
@@ -89,13 +84,12 @@ export default function Efetivo() {
         <Panel title="Bombeiros" icon={<Users className="h-5 w-5" />}>
           <Table headers={[
             "Nome de guerra", "Nome completo", "Posto/graduação", "Matrícula",
-            "Unidade", "Admissão", "Situação", ...(mayDelete ? ["Ações"] : []),
+            "Unidade", "Admissão", "Situação", "Ações",
           ]}>
             {list.data.items.map((firefighter) => (
               <FirefighterRow
                 key={firefighter.id}
                 firefighter={firefighter}
-                mayDelete={mayDelete}
                 onChanged={list.reload}
               />
             ))}
@@ -116,16 +110,15 @@ export default function Efetivo() {
   )
 }
 
-function FirefighterRow({ firefighter, mayDelete, onChanged }: {
+function FirefighterRow({ firefighter, onChanged }: {
   firefighter: Firefighter
-  mayDelete: boolean
   onChanged: () => void
 }) {
   const remove = useMutation(() => firefighters.remove(firefighter.id))
 
   return (
     <Row>
-      <Cell className="font-bold">{firefighter.war_name}</Cell>
+      <Cell className="font-semibold">{firefighter.war_name}</Cell>
       <Cell>{firefighter.name}</Cell>
       <Cell>{RANK_LABEL[firefighter.rank]}</Cell>
       <Cell className="font-mono text-sm">{firefighter.military_id}</Cell>
@@ -137,21 +130,19 @@ function FirefighterRow({ firefighter, mayDelete, onChanged }: {
         </Badge>
       </Cell>
 
-      {mayDelete && (
-        <Cell>
-          <ConfirmButton
-            label="Excluir"
-            confirmLabel="Confirmar"
-            className="px-2.5 py-1 text-sm"
-            disabled={remove.submitting}
-            onConfirm={async () => {
-              const done = await remove.run(undefined)
-              if (done) onChanged()
-            }}
-          />
-          {remove.error && <span className="mt-1 block max-w-xs text-sm text-[#DE5656]">{remove.error}</span>}
-        </Cell>
-      )}
+      <Cell>
+        <ConfirmButton
+          label="Excluir"
+          confirmLabel="Confirmar"
+          className="px-2.5 py-1 text-sm"
+          disabled={remove.submitting}
+          onConfirm={async () => {
+            const done = await remove.run(undefined)
+            if (done) onChanged()
+          }}
+        />
+        {remove.error && <span className="mt-1 block max-w-xs text-sm text-alert">{remove.error}</span>}
+      </Cell>
     </Row>
   )
 }

@@ -1,16 +1,16 @@
 /**
  * The model's own screen: what is loaded, and the training that replaces it.
  *
- * Training is an administrative action — it overwrites the checkpoint every
- * dispatch depends on, with no rollback — so the button is only offered to an
- * ADMIN and the warning is stated plainly rather than buried.
+ * Training overwrites the checkpoint every dispatch depends on and there is no
+ * rollback, so the warning is stated plainly above the button rather than
+ * buried under it.
  */
 
 import { useEffect, useState } from "react"
 import { AlertTriangle, Brain, ChartLine, History, Play } from "lucide-react"
 
 import { ai } from "@/api/endpoints"
-import { TRAINING_STATUS_LABEL, TRAINING_STATUS_TONE } from "@/api/labels"
+import { TONE, TRAINING_STATUS_LABEL, TRAINING_STATUS_TONE } from "@/api/labels"
 import type { TrainingRun } from "@/api/types"
 import {
   ActionButton, Badge, Cell, Field, FieldButton, Page, PageHeader, Pagination, Panel, Row, Table,
@@ -20,7 +20,6 @@ import { EmptyState, ErrorBox, LoadingBlock } from "@/components/layout/feedback
 import {
   ConvergenceSpeed, EpochsVsQuality, LossCurve, RunComparison,
 } from "@/components/charts/training-charts"
-import { useAuth } from "@/auth/auth-context"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatDateTime, formatLoss } from "@/lib/format"
 
@@ -28,8 +27,6 @@ import { formatDateTime, formatLoss } from "@/lib/format"
 const GOOD_VALIDATION_LOSS = 0.06
 
 export default function RedeNeural() {
-  const { can } = useAuth()
-  const isAdmin = can(["ADMIN"])
 
   const [page, setPage] = useState(1)
   const [epochs, setEpochs] = useState("800")
@@ -93,10 +90,10 @@ export default function RedeNeural() {
           {model.data && (
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-3">
-                <Badge tone={model.data.loaded ? "bg-green-600" : "bg-[#DE5656]"}>
+                <Badge tone={model.data.loaded ? TONE.ok : TONE.alert}>
                   {model.data.loaded ? "Carregado" : "Indisponível"}
                 </Badge>
-                <span className="text-neutral-700">{model.data.city}</span>
+                <span className="text-ink-muted">{model.data.city}</span>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -104,65 +101,57 @@ export default function RedeNeural() {
                 <Figure label="Ruas (arestas)" value={model.data.graph_edges.toLocaleString("pt-BR")} />
               </div>
 
-              <div className="border bg-[#F5EFE6] px-4 py-2">
-                <p className="text-sm text-neutral-600">Versão do modelo</p>
-                <p className="font-mono text-neutral-900">{model.data.model_version ?? "—"}</p>
+              <div className="rounded-sm border border-line bg-surface-muted px-4 py-2">
+                <p className="text-sm text-ink-muted">Versão do modelo</p>
+                <p className="font-mono text-ink">{model.data.model_version ?? "—"}</p>
               </div>
             </div>
           )}
         </Panel>
 
         <Panel title="Treinar o modelo" icon={<Play className="h-5 w-5" />}>
-          {!isAdmin && (
-            <p className="text-neutral-600">
-              Apenas administradores podem iniciar um treinamento.
-            </p>
-          )}
-
-          {isAdmin && (
-            <div className="flex flex-col gap-4">
-              <div className="flex items-start gap-3 border border-[#E8A240] bg-[#E8A240]/15 px-4 py-3">
-                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#E8A240]" />
-                <p className="text-neutral-900">
-                  O treinamento <strong>substitui o modelo atual</strong> mesmo que o resultado seja pior,
-                  e não há como voltar atrás. Faça uma cópia de <code>models/path_network.pth</code> antes.
-                </p>
-              </div>
-
-              {start.error && <ErrorBox message={start.error} />}
-
-              {/* The hint used to live inside the field, and a hint is wider
-                  than a four-digit number: it stretched the column and left the
-                  button floating away from the input it belongs to. It reads
-                  below the row instead. */}
-              <div className="flex flex-wrap items-start gap-3">
-                <Field label="Épocas">
-                  <TextInput
-                    type="number"
-                    min={10}
-                    max={5000}
-                    value={epochs}
-                    onChange={(event) => setEpochs(event.target.value)}
-                    className="w-32"
-                  />
-                </Field>
-
-                <FieldButton>
-                  <ActionButton tone="primary" onClick={handleStart} disabled={start.submitting}>
-                    <Play className="h-5 w-5" />
-                    {start.submitting ? "Iniciando..." : "Iniciar treinamento"}
-                  </ActionButton>
-                </FieldButton>
-              </div>
-
-              <p className="text-sm text-neutral-500">
-                Entre 10 e 5000 épocas — o padrão do projeto é 800. O treinador só reporta
-                progresso a cada 50, então corridas muito curtas terminam sem nenhuma medição.
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start gap-3 rounded-sm border border-warn/30 bg-warn-soft px-4 py-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warn" />
+              <p className="text-ink">
+                O treinamento <strong>substitui o modelo atual</strong> mesmo que o resultado seja pior,
+                e não há como voltar atrás. Faça uma cópia de <code>models/path_network.pth</code> antes.
               </p>
-
-              {watching && live.data && <LiveRun run={live.data} />}
             </div>
-          )}
+
+            {start.error && <ErrorBox message={start.error} />}
+
+            {/* The hint used to live inside the field, and a hint is wider
+                than a four-digit number: it stretched the column and left the
+                button floating away from the input it belongs to. It reads
+                below the row instead. */}
+            <div className="flex flex-wrap items-start gap-3">
+              <Field label="Épocas">
+                <TextInput
+                  type="number"
+                  min={10}
+                  max={5000}
+                  value={epochs}
+                  onChange={(event) => setEpochs(event.target.value)}
+                  className="w-32"
+                />
+              </Field>
+
+              <FieldButton>
+                <ActionButton tone="primary" onClick={handleStart} disabled={start.submitting}>
+                  <Play className="h-5 w-5" />
+                  {start.submitting ? "Iniciando..." : "Iniciar treinamento"}
+                </ActionButton>
+              </FieldButton>
+            </div>
+
+            <p className="text-sm text-ink-soft">
+              Entre 10 e 5000 épocas — o padrão do projeto é 800. O treinador só reporta
+              progresso a cada 50, então corridas muito curtas terminam sem nenhuma medição.
+            </p>
+
+            {watching && live.data && <LiveRun run={live.data} />}
+          </div>
         </Panel>
       </div>
 
@@ -192,7 +181,7 @@ export default function RedeNeural() {
         )}
 
         {selectedRun && (
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-ink-soft">
             Clique numa coluna, numa bolha ou numa linha do histórico abaixo para ver a curva
             daquele treinamento.
           </p>
@@ -215,7 +204,7 @@ export default function RedeNeural() {
                   <Cell>
                     <Badge tone={TRAINING_STATUS_TONE[run.status]}>{TRAINING_STATUS_LABEL[run.status]}</Badge>
                     {run.error_message && (
-                      <span className="mt-1 block max-w-md truncate text-sm text-[#DE5656]" title={run.error_message}>
+                      <span className="mt-1 block max-w-md truncate text-sm text-alert" title={run.error_message}>
                         {run.error_message}
                       </span>
                     )}
@@ -252,9 +241,9 @@ export default function RedeNeural() {
 
 function Figure({ label, value }: { label: string, value: string }) {
   return (
-    <div className="border bg-white px-4 py-3">
-      <p className="text-sm text-neutral-600">{label}</p>
-      <p className="text-2xl font-bold text-neutral-900">{value}</p>
+    <div className="rounded-sm border border-line bg-surface px-4 py-3">
+      <p className="text-sm text-ink-muted">{label}</p>
+      <p className="text-2xl font-semibold text-ink">{value}</p>
     </div>
   )
 }
@@ -263,9 +252,9 @@ function LiveRun({ run }: { run: TrainingRun }) {
   const running = run.status === "PENDENTE" || run.status === "EXECUTANDO"
 
   return (
-    <div className="flex flex-col gap-2 border bg-[#F5EFE6] px-4 py-3">
+    <div className="flex flex-col gap-2 rounded-sm border border-line bg-surface-muted px-4 py-3">
       <div className="flex items-center justify-between">
-        <p className="font-bold text-neutral-900">Execução acompanhada</p>
+        <p className="font-semibold text-ink">Execução acompanhada</p>
         <Badge tone={TRAINING_STATUS_TONE[run.status]}>{TRAINING_STATUS_LABEL[run.status]}</Badge>
       </div>
 
@@ -278,7 +267,7 @@ function LiveRun({ run }: { run: TrainingRun }) {
       </div>
 
       {running && (
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-ink-muted">
           O treinador reporta o progresso a cada 50 épocas, então a barra anda em degraus.
           A corrida também pode parar antes do fim por <em>early stopping</em>, quando a loss de
           validação deixa de melhorar.
@@ -286,14 +275,14 @@ function LiveRun({ run }: { run: TrainingRun }) {
       )}
 
       {run.status === "CONCLUIDO" && run.best_validation_loss !== null && (
-        <p className="text-neutral-900">
+        <p className="text-ink">
           {run.best_validation_loss <= GOOD_VALIDATION_LOSS
             ? "Resultado dentro do esperado — o serviço já recarregou este modelo."
             : `Loss de validação acima de ${GOOD_VALIDATION_LOSS}: o modelo ficou pior que o alvo do projeto.`}
         </p>
       )}
 
-      {run.error_message && <p className="text-[#DE5656]">{run.error_message}</p>}
+      {run.error_message && <p className="text-alert">{run.error_message}</p>}
     </div>
   )
 }
@@ -313,19 +302,19 @@ function EpochProgress({ run }: { run: TrainingRun }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between">
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-ink-muted">
           {run.current_epoch === null
             ? (done ? "Nenhuma época reportada" : "Aguardando a primeira medição...")
-            : <>Época <strong className="text-neutral-900">{reached}</strong> de {run.epochs}</>}
+            : <>Época <strong className="text-ink">{reached}</strong> de {run.epochs}</>}
         </p>
-        <p className="text-sm font-semibold text-neutral-700">
+        <p className="text-sm font-semibold text-ink-muted">
           {run.current_epoch === null ? "—" : `${Math.round(percent)}%`}
         </p>
       </div>
 
-      <div className="h-2.5 w-full border border-neutral-300 bg-white">
+      <div className="h-2.5 w-full border border-line bg-surface">
         <div
-          className={`h-full transition-[width] duration-500 ${done ? "bg-neutral-500" : "bg-[#DE5656]"}`}
+          className={`h-full transition-[width] duration-500 ${done ? "bg-ok" : "bg-accent"}`}
           style={{ width: `${percent}%` }}
         />
       </div>
@@ -335,14 +324,14 @@ function EpochProgress({ run }: { run: TrainingRun }) {
 
 function Metric({ label, value }: { label: string, value: string }) {
   return (
-    <div className="border bg-white px-3 py-2">
-      <p className="text-sm text-neutral-600">{label}</p>
-      <p className="text-xl font-bold text-neutral-900">{value}</p>
+    <div className="rounded-sm border border-line bg-surface px-3 py-2">
+      <p className="text-sm text-ink-muted">{label}</p>
+      <p className="text-xl font-semibold text-ink">{value}</p>
     </div>
   )
 }
 
 function qualityTone(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "text-neutral-500"
-  return value <= GOOD_VALIDATION_LOSS ? "font-bold text-green-700" : "font-bold text-[#E8A240]"
+  if (value === null || value === undefined) return "text-ink-soft"
+  return value <= GOOD_VALIDATION_LOSS ? "font-semibold text-ok" : "font-semibold text-warn"
 }

@@ -16,7 +16,7 @@ import { translateMessage } from "@/api/messages"
 import {
   DISPATCH_NEXT_STATUSES, DISPATCH_STATUS_LABEL, DISPATCH_STATUS_TONE,
   NATURE_LABEL, OCCURRENCE_NEXT_STATUSES, OCCURRENCE_STATUS_LABEL, OCCURRENCE_STATUS_TONE,
-  PRIORITY_LABEL, PRIORITY_TONE, VEHICLE_TYPE_LABEL, optionsOf,
+  PRIORITY_LABEL, PRIORITY_TEXT_TONE, PRIORITY_TONE, VEHICLE_TYPE_LABEL, optionsOf,
 } from "@/api/labels"
 import type {
   Dispatch, DispatchStatus, Occurrence, OccurrencePriority, OccurrenceStatus, RouteVariant,
@@ -78,7 +78,7 @@ export default function OcorrenciaDetalhe() {
 
   return (
     <Page>
-      <Link to="/ocorrencias" className="flex w-fit items-center gap-1 font-semibold text-neutral-700 hover:text-black">
+      <Link to="/ocorrencias" className="flex w-fit items-center gap-1 font-semibold text-ink-muted hover:text-ink">
         <ArrowLeft className="h-4 w-4" />
         Voltar para as ocorrências
       </Link>
@@ -116,21 +116,34 @@ export default function OcorrenciaDetalhe() {
 
       {changeStatus.error && <ErrorBox message={changeStatus.error} />}
 
-      <div className={`flex flex-col gap-3 border px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5 ${PRIORITY_TONE[occurrence.priority]}`}>
-        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-          <OccurrenceAvatar nature={occurrence.nature} size="lg" />
+      {/* The severity band of the first version filled this whole strip. One
+          incident deserves the emphasis, but as a rail down the side, so the
+          same language reads here and on the list it was opened from. */}
+      <div className="flex rounded-sm border border-line bg-surface">
+        <span aria-hidden className={`w-1.5 shrink-0 rounded-l-sm ${PRIORITY_TONE[occurrence.priority]}`} />
 
-          <div className="min-w-0 flex-1">
-            <p className="text-xl font-bold text-white sm:text-2xl">{NATURE_LABEL[occurrence.nature]}</p>
-            <p className="break-words text-white/90">{occurrence.address}</p>
+        <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <OccurrenceAvatar
+              nature={occurrence.nature}
+              size="lg"
+              tone={PRIORITY_TEXT_TONE[occurrence.priority]}
+            />
+
+            <div className="min-w-0 flex-1">
+              <p className="text-lg font-semibold text-ink sm:text-xl">{NATURE_LABEL[occurrence.nature]}</p>
+              <p className="break-words text-ink-muted">{occurrence.address}</p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-row-reverse flex-wrap items-center justify-end gap-2 sm:ml-auto sm:flex-col sm:items-end">
-          <Badge tone={OCCURRENCE_STATUS_TONE[occurrence.status]}>
-            {OCCURRENCE_STATUS_LABEL[occurrence.status]}
-          </Badge>
-          <span className="font-semibold text-white">Prioridade {PRIORITY_LABEL[occurrence.priority]}</span>
+          <div className="flex flex-row-reverse flex-wrap items-center justify-end gap-2 sm:ml-auto sm:flex-col sm:items-end">
+            <Badge tone={OCCURRENCE_STATUS_TONE[occurrence.status]}>
+              {OCCURRENCE_STATUS_LABEL[occurrence.status]}
+            </Badge>
+            <span className={`label-caps ${PRIORITY_TEXT_TONE[occurrence.priority]}`}>
+              Prioridade {PRIORITY_LABEL[occurrence.priority]}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -150,8 +163,8 @@ export default function OcorrenciaDetalhe() {
             />
 
             <div className="pt-1">
-              <p className="font-bold text-neutral-900">Relato</p>
-              <p className="mt-1 whitespace-pre-line text-neutral-800">{occurrence.description}</p>
+              <p className="font-semibold text-ink">Relato</p>
+              <p className="mt-1 whitespace-pre-line text-ink">{occurrence.description}</p>
             </div>
           </Panel>
 
@@ -222,9 +235,9 @@ export default function OcorrenciaDetalhe() {
 
 function Detail({ term, value }: { term: string, value: string }) {
   return (
-    <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-neutral-100 pb-1.5">
-      <span className="text-neutral-600">{term}</span>
-      <span className="font-semibold text-neutral-900">{value}</span>
+    <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-1.5">
+      <span className="text-ink-muted">{term}</span>
+      <span className="font-semibold text-ink">{value}</span>
     </div>
   )
 }
@@ -238,7 +251,7 @@ function RouteComparison({ neural, shortest }: { neural: RouteVariant | null, sh
   if (!neural || !shortest) {
     return (
       <Panel title="Comparação de rotas" icon={<Brain className="h-5 w-5" />}>
-        <p className="text-neutral-600">
+        <p className="text-ink-muted">
           A comparação aparece assim que uma viatura for despachada e a rede neural responder.
         </p>
       </Panel>
@@ -253,30 +266,30 @@ function RouteComparison({ neural, shortest }: { neural: RouteVariant | null, sh
   return (
     <Panel title="Comparação de rotas" icon={<Brain className="h-5 w-5" />}>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Variant title="Rede neural" accent="border-[#E53935]" route={neural} />
-        <Variant title="Menor distância" accent="border-[#1565C0]" route={shortest} />
+        <Variant title="Rede neural" accent="border-accent" route={neural} />
+        <Variant title="Menor distância" accent="border-line-strong" route={shortest} />
       </div>
 
-      <div className="border bg-[#F5EFE6] px-4 py-3">
+      <div className="rounded-sm border border-line bg-surface-muted px-4 py-3">
         {savedSeconds > 0 ? (
-          <p className="text-neutral-900">
+          <p className="text-ink">
             A rota da rede neural chega{" "}
-            <strong className="text-green-700">{formatDuration(savedSeconds)} antes</strong>{" "}
+            <strong className="text-ok">{formatDuration(savedSeconds)} antes</strong>{" "}
             ({percent.toFixed(1).replace(".", ",")}% mais rápida), percorrendo{" "}
             {formatDistance(neural.distance_meters - shortest.distance_meters)} a mais.
           </p>
         ) : savedSeconds < 0 ? (
-          <p className="text-neutral-900">
+          <p className="text-ink">
             Neste trajeto a rota mais curta em metros foi{" "}
-            <strong className="text-[#DE5656]">{formatDuration(Math.abs(savedSeconds))} mais rápida</strong>{" "}
+            <strong className="text-alert">{formatDuration(Math.abs(savedSeconds))} mais rápida</strong>{" "}
             que a escolhida pela rede.
           </p>
         ) : (
-          <p className="text-neutral-900">As duas rotas levam o mesmo tempo estimado.</p>
+          <p className="text-ink">As duas rotas levam o mesmo tempo estimado.</p>
         )}
 
         {neural.model_version && (
-          <p className="mt-1 text-sm text-neutral-600">
+          <p className="mt-1 text-sm text-ink-muted">
             Modelo <span className="font-mono">{neural.model_version}</span>
           </p>
         )}
@@ -287,11 +300,11 @@ function RouteComparison({ neural, shortest }: { neural: RouteVariant | null, sh
 
 function Variant({ title, accent, route }: { title: string, accent: string, route: RouteVariant }) {
   return (
-    <div className={`flex flex-col gap-1 border-l-4 bg-white px-3 py-2 ${accent}`}>
-      <p className="font-bold text-neutral-900">{title}</p>
-      <p className="text-2xl font-bold text-neutral-900">{formatDuration(route.estimated_time_seconds)}</p>
-      <p className="text-neutral-700">{formatDistance(route.distance_meters)}</p>
-      <p className="text-sm text-neutral-500">{route.node_count} cruzamentos</p>
+    <div className={`flex flex-col gap-1 rounded-sm border-l-4 bg-surface px-3 py-2 ${accent}`}>
+      <p className="font-semibold text-ink">{title}</p>
+      <p className="text-2xl font-semibold text-ink">{formatDuration(route.estimated_time_seconds)}</p>
+      <p className="text-ink-muted">{formatDistance(route.distance_meters)}</p>
+      <p className="text-sm text-ink-soft">{route.node_count} cruzamentos</p>
     </div>
   )
 }
@@ -306,18 +319,18 @@ function DispatchCard({ dispatch, onChanged }: { dispatch: Dispatch, onChanged: 
   }
 
   return (
-    <div className="flex flex-col gap-3 border bg-white px-4 py-3">
+    <div className="flex flex-col gap-3 rounded-sm border border-line bg-surface px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-lg font-bold text-neutral-900">
+          <p className="text-lg font-semibold text-ink">
             {dispatch.vehicle?.prefix ?? "Viatura"}
             {dispatch.vehicle && (
-              <span className="ml-2 text-sm font-normal text-neutral-600">
+              <span className="ml-2 text-sm font-normal text-ink-muted">
                 {VEHICLE_TYPE_LABEL[dispatch.vehicle.type]}
               </span>
             )}
           </p>
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-ink-muted">
             Despachada em {formatDateTime(dispatch.dispatched_at)}
           </p>
         </div>
@@ -328,7 +341,7 @@ function DispatchCard({ dispatch, onChanged }: { dispatch: Dispatch, onChanged: 
       </div>
 
       {dispatch.crew && (
-        <p className="text-sm text-neutral-700">
+        <p className="text-sm text-ink-muted">
           Guarnição <strong>{dispatch.crew.name}</strong>
           {dispatch.crew.commander && ` — comandante ${dispatch.crew.commander.war_name}`}
         </p>
@@ -404,7 +417,7 @@ function DispatchModal({ occurrence, onClose, onDispatched }: {
         <ErrorDetails details={send.details} />
 
         {warning && (
-          <div className="border border-[#E8A240] bg-[#E8A240]/15 px-4 py-3 text-neutral-900">
+          <div className="rounded-sm border border-warn/30 bg-warn-soft px-4 py-3 text-ink">
             {warning}
           </div>
         )}
@@ -422,7 +435,7 @@ function DispatchModal({ occurrence, onClose, onDispatched }: {
         </Field>
 
         {fleet.data && fleet.data.items.length === 0 && (
-          <p className="text-[#DE5656]">Nenhuma viatura disponível no momento.</p>
+          <p className="text-alert">Nenhuma viatura disponível no momento.</p>
         )}
 
         <Field label="Guarnição" hint="Opcional — apenas guarnições ligadas à viatura escolhida">

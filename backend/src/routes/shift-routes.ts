@@ -7,19 +7,19 @@ import { DeleteShiftController } from "../controllers/shift/delete-shift-control
 
 export async function shiftRoutes(fastify: FastifyTypedInstance, plugins: FastifyPluginOptions) {
 
-  fastify.get("/", { onRequest: [fastify.authenticate] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.get("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new ListShiftsController().handle(req, rep)
   })
 
-  fastify.post("/", { onRequest: [fastify.authorize(["ADMIN", "COMANDANTE"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.post("/", async (req: FastifyRequest, rep: FastifyReply) => {
     return new CreateShiftController().handle(req, rep)
   })
 
-  fastify.patch("/:id", { onRequest: [fastify.authorize(["ADMIN", "COMANDANTE"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.patch("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new UpdateShiftController().handle(req, rep)
   })
 
-  fastify.delete("/:id", { onRequest: [fastify.authorize(["ADMIN", "COMANDANTE"])] }, async (req: FastifyRequest, rep: FastifyReply) => {
+  fastify.delete("/:id", async (req: FastifyRequest, rep: FastifyReply) => {
     return new DeleteShiftController().handle(req, rep)
   })
 }
