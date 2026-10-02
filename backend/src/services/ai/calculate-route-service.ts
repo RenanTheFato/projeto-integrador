@@ -1,7 +1,8 @@
 import { Prisma, Route } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { NotFoundError } from "../../errors/index.js";
-import { AiClient } from "./ai-client.js";
+import { AiClient, Closure } from "./ai-client.js";
+import { recordOccurrenceEvents } from "../occurrence/occurrence-events.js";
 
 interface CalculateRouteRequest {
   origin_latitude?: number,
@@ -13,7 +14,9 @@ interface CalculateRouteRequest {
   /// When given, the result is stored and linked to the dispatch.
   dispatch_id?: string,
   /// Enables the constrained emergency-operational routing profile.
-  critical_mode?: boolean
+  critical_mode?: boolean,
+  /// Streets reported blocked; avoided for this calculation only.
+  closures?: Closure[]
 }
 
 export class CalculateRouteService {
@@ -22,7 +25,8 @@ export class CalculateRouteService {
     neural: unknown,
     critical: unknown,
     shortest: unknown,
-    critical_mode: boolean
+    critical_mode: boolean,
+    closures: { count: number, blocked_edges: number }
   }> {
 
     const origin = await this.resolveOrigin(data)
@@ -32,20 +36,25 @@ export class CalculateRouteService {
       longitude: data.destination_longitude
     }
 
+    let occurrenceId: string | null = null
+
     if (data.dispatch_id) {
       const dispatch = await prisma.dispatch.findUnique({
         where: { id: data.dispatch_id },
-        select: { id: true }
+        select: { id: true, occurrence_id: true }
       })
 
       if (!dispatch) {
         throw new NotFoundError("Dispatch not found")
       }
 
+      occurrenceId = dispatch.occurrence_id
+
     }
 
     const result = await new AiClient().calculateRoute(origin, destination, {
-      critical_mode: data.critical_mode ?? false
+      critical_mode: data.critical_mode ?? false,
+      closures: data.closures
     })
 
     // Without a dispatch this is an exploratory query (the "what would the
@@ -57,6 +66,7 @@ export class CalculateRouteService {
         critical: result.critical,
         shortest: result.shortest,
         critical_mode: result.critical_mode,
+        closures: result.closures,
       }
     }
 
@@ -79,6 +89,8 @@ export class CalculateRouteService {
       estimated_time_seconds: variant.estimated_time_seconds,
       node_count: variant.node_count,
       geometry: variant.geometry,
+      steps: variant.steps,
+      segments: variant.segments,
       model_version: result.model_version
     }))
 
@@ -100,6 +112,14 @@ export class CalculateRouteService {
           critical_mode: result.critical_mode,
         }
       })
+
+      await recordOccurrenceEvents([{
+        occurrence_id: occurrenceId!,
+        dispatch_id: data.dispatch_id,
+        type: "ROTA",
+        to_value: usedRoute.algorithm,
+        message: result.closures.count > 0 ? `closures:${result.closures.count}` : null
+      }])
     }
 
     return {
@@ -108,6 +128,7 @@ export class CalculateRouteService {
       critical: result.critical,
       shortest: result.shortest,
       critical_mode: result.critical_mode,
+      closures: result.closures,
     }
   }
 

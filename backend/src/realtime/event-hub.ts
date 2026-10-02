@@ -8,6 +8,7 @@ export type RealtimeEvent =
   | { type: "dispatch.created", payload: { id: string, occurrence_id: string, vehicle_id: string, vehicle_prefix: string, status: string } }
   | { type: "dispatch.updated", payload: { id: string, occurrence_id: string, status: string } }
   | { type: "vehicle.moved", payload: { id: string, prefix: string, latitude: string, longitude: string } }
+  | { type: "occurrence.timeline", payload: { occurrence_id: string } }
 
 interface Subscriber {
   socket: WebSocket

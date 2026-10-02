@@ -1,6 +1,7 @@
 import { Prisma, Vehicle, VehicleStatus } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { ConflictError, NotFoundError } from "../../errors/index.js";
+import { eventHub } from "../../realtime/event-hub.js";
 
 interface UpdateVehicleRequest {
   id: string,
@@ -69,7 +70,7 @@ export class UpdateVehicleService {
       }
     }
 
-    return prisma.vehicle.update({
+    const updated = await prisma.vehicle.update({
       where: { id },
       data: {
         ...rest,
@@ -80,5 +81,21 @@ export class UpdateVehicleService {
         ...(current_longitude !== undefined && { current_longitude: new Prisma.Decimal(current_longitude) })
       }
     })
+
+    // A position report from the vehicle terminal moves the marker on every
+    // console without waiting for a refresh.
+    if (current_latitude !== undefined && current_longitude !== undefined) {
+      eventHub.publish({
+        type: "vehicle.moved",
+        payload: {
+          id: updated.id,
+          prefix: updated.prefix,
+          latitude: String(updated.current_latitude),
+          longitude: String(updated.current_longitude)
+        }
+      })
+    }
+
+    return updated
   }
 }

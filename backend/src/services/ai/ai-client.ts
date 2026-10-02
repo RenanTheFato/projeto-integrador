@@ -1,11 +1,45 @@
 import { env } from "../../config/env.js";
 import { BadRequestError, ConflictError, NotFoundError, ServiceUnavailableError } from "../../errors/index.js";
 
+/// One manoeuvre of the turn-by-turn list. Structured rather than worded, so
+/// the interface decides how to say "turn left" in its own language.
+export type RouteStep = {
+  type: "depart" | "turn" | "continue" | "roundabout" | "arrive",
+  modifier: string | null,
+  street: string | null,
+  highway: string,
+  distance_meters: number,
+  time_seconds: number,
+  location: [number, number],
+  geometry_index: number
+}
+
+/// Predicted speed of one edge of the route, against its posted limit.
+/// `start`/`end` index into the variant's geometry.
+export type RouteSegment = {
+  start: number,
+  end: number,
+  length_meters: number,
+  time_seconds: number,
+  speed_kmh: number,
+  limit_kmh: number,
+  highway: string,
+  street: string | null,
+  counterflow: boolean,
+  shoulder: boolean
+}
+
 export interface RouteVariant {
   distance_meters: number,
   estimated_time_seconds: number,
   node_count: number,
   geometry: [number, number][],
+  steps: RouteStep[],
+  segments: RouteSegment[],
+  /// Metres driven on each class of road.
+  composition: Record<"highway" | "primary" | "secondary" | "tertiary" | "local", number>,
+  /// Neural variant only: share of its distance on the same streets as the shortest.
+  shared_with_shortest?: number,
   critical_maneuvers?: {
     counterflow_segments: number,
     shoulder_segments: number
@@ -17,7 +51,55 @@ export interface RouteResponse {
   critical: RouteVariant | null,
   shortest: RouteVariant,
   critical_mode: boolean,
+  closures: { count: number, blocked_edges: number },
   model_version: string | null
+}
+
+export interface GeoPoint {
+  latitude: number,
+  longitude: number
+}
+
+/// A street blocked by the dispatcher: every edge inside the circle is
+/// avoided for that one calculation.
+export interface Closure extends GeoPoint {
+  radius_m: number
+}
+
+export interface Isochrone {
+  minutes: number,
+  area_km2: number,
+  reached_nodes: number,
+  geometry: { type: "MultiPolygon", coordinates: number[][][][] } | null
+}
+
+export interface IsochroneResponse {
+  critical_mode: boolean,
+  model_version: string | null,
+  /// Indexes of the origins that fall outside the street network.
+  skipped_origins: number[],
+  isochrones: Isochrone[],
+  points?: {
+    total: number,
+    times_seconds: (number | null)[],
+    covered: Record<string, number>
+  }
+}
+
+export interface TravelTime {
+  reachable: boolean,
+  time_seconds: number | null,
+  distance_meters: number | null,
+  snap_distance_meters: number
+}
+
+export interface Hospital {
+  id: string,
+  name: string,
+  latitude: number,
+  longitude: number,
+  emergency: boolean,
+  phone: string | null
 }
 
 /// One line of the trainer's progress table.
@@ -135,7 +217,7 @@ export class AiClient {
   async calculateRoute(
     origin: { latitude: number, longitude: number },
     destination: { latitude: number, longitude: number },
-    options: { critical_mode?: boolean } = {},
+    options: { critical_mode?: boolean, closures?: Closure[] } = {},
   ): Promise<RouteResponse> {
     return this.request<RouteResponse>("POST", "/routes", {
       origin_latitude: origin.latitude,
@@ -143,7 +225,41 @@ export class AiClient {
       destination_latitude: destination.latitude,
       destination_longitude: destination.longitude,
       ...(options.critical_mode ? { critical_mode: true } : {}),
+      ...(options.closures?.length ? { closures: options.closures } : {}),
     })
+  }
+
+  async isochrones(
+    origins: GeoPoint[],
+    minutes: number[],
+    options: { critical_mode?: boolean, points?: GeoPoint[] } = {},
+  ): Promise<IsochroneResponse> {
+    return this.request<IsochroneResponse>("POST", "/isochrones", {
+      origins,
+      minutes,
+      critical_mode: options.critical_mode ?? false,
+      ...(options.points ? { points: options.points } : {}),
+    })
+  }
+
+  async travelTimes(
+    anchor: GeoPoint,
+    points: GeoPoint[],
+    options: { direction?: "to_anchor" | "from_anchor", critical_mode?: boolean, closures?: Closure[] } = {},
+  ): Promise<TravelTime[]> {
+    const response = await this.request<{ results: TravelTime[] }>("POST", "/travel-times", {
+      anchor,
+      points,
+      direction: options.direction ?? "to_anchor",
+      critical_mode: options.critical_mode ?? false,
+      ...(options.closures?.length ? { closures: options.closures } : {}),
+    })
+    return response.results
+  }
+
+  async hospitals(): Promise<Hospital[]> {
+    const response = await this.request<{ hospitals: Hospital[] }>("GET", "/places/hospitals")
+    return response.hospitals
   }
 
   async startTraining(epochs: number): Promise<TrainingJob> {

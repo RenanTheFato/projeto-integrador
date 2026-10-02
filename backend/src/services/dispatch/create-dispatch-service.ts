@@ -3,6 +3,7 @@ import { prisma } from "../../config/prisma.js";
 import { ConflictError, NotFoundError } from "../../errors/index.js";
 import { eventHub } from "../../realtime/event-hub.js";
 import { AiClient } from "../ai/ai-client.js";
+import { recordOccurrenceEvents } from "../occurrence/occurrence-events.js";
 
 interface CreateDispatchRequest {
   occurrence_id: string,
@@ -94,6 +95,19 @@ export class CreateDispatchService {
       return created
     })
 
+    await recordOccurrenceEvents([
+      {
+        occurrence_id,
+        dispatch_id: dispatch.id,
+        type: "DESPACHO",
+        message: vehicle.prefix,
+        to_value: dispatch.status
+      },
+      ...(occurrence.status === "ABERTA"
+        ? [{ occurrence_id, type: "STATUS" as const, from_value: "ABERTA", to_value: "DESPACHADA" }]
+        : []),
+    ])
+
     eventHub.publish({
       type: "dispatch.created",
       payload: {
@@ -110,6 +124,7 @@ export class CreateDispatchService {
     // its failure is recorded, not propagated.
     const routes = await this.attachRoutes(
       dispatch.id,
+      occurrence_id,
       vehicle,
       occurrence,
       critical_mode,
@@ -120,6 +135,7 @@ export class CreateDispatchService {
 
   private async attachRoutes(
     dispatchId: string,
+    occurrenceId: string,
     vehicle: { current_latitude: Prisma.Decimal | null, current_longitude: Prisma.Decimal | null, unit: { latitude: Prisma.Decimal, longitude: Prisma.Decimal } },
     occurrence: { latitude: Prisma.Decimal, longitude: Prisma.Decimal },
     criticalMode: boolean,
@@ -159,6 +175,8 @@ export class CreateDispatchService {
         estimated_time_seconds: variant.estimated_time_seconds,
         node_count: variant.node_count,
         geometry: variant.geometry,
+        steps: variant.steps,
+        segments: variant.segments,
         model_version: result.model_version
       }))
 
@@ -177,6 +195,13 @@ export class CreateDispatchService {
           where: { id: dispatchId },
           data: { used_route_id: usedRoute.id }
         })
+
+        await recordOccurrenceEvents([{
+          occurrence_id: occurrenceId,
+          dispatch_id: dispatchId,
+          type: "ROTA",
+          to_value: usedRoute.algorithm
+        }])
       }
 
       return persisted

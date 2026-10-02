@@ -11,7 +11,14 @@ const envSchema = z.object({
 
   // Servico Python (FastAPI) que calcula rotas e executa o treinamento.
   AI_SERVICE_URL: z.string().default("http://127.0.0.1:8000"),
-  AI_SERVICE_TIMEOUT_MS: z.coerce.number().default(120000)
+  AI_SERVICE_TIMEOUT_MS: z.coerce.number().default(120000),
+
+  // Servicos publicos de mapa, sem chave: Photon (busca de endereco sobre o
+  // OpenStreetMap) e Open-Meteo (clima). O User-Agent identifica o sistema,
+  // como as politicas de uso desses servicos pedem.
+  GEOCODER_URL: z.string().default("https://photon.komoot.io"),
+  WEATHER_URL: z.string().default("https://api.open-meteo.com"),
+  GEO_USER_AGENT: z.string().default("ZENO-dispatch-console/1.0")
 })
 
 export const env = envSchema.parse(process.env)
