@@ -30,6 +30,7 @@ const OPERATIONAL: NavItem[] = [
   { to: "/ocorrencias", label: "Ocorrências" },
   { to: "/despachos", label: "Despachos" },
   { to: "/rotas", label: "Rotas" },
+  { to: "/cobertura", label: "Cobertura" },
   { to: "/estatisticas", label: "Estatísticas" },
   { to: "/rede-neural", label: "IA" },
 ]
@@ -40,6 +41,7 @@ const REGISTRY: NavItem[] = [
   { to: "/guarnicoes", label: "Guarnições" },
   { to: "/turnos", label: "Turnos" },
   { to: "/unidades", label: "Unidades" },
+  { to: "/hidrantes", label: "Pontos de água" },
 ]
 
 /** An underline in the accent marks the screen you are on — no colour fill. */

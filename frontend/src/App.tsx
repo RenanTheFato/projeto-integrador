@@ -16,6 +16,8 @@ import Viaturas from "@/pages/viaturas"
 import Guarnicoes from "@/pages/guarnicoes"
 import Turnos from "@/pages/turnos"
 import Unidades from "@/pages/unidades"
+import Cobertura from "@/pages/cobertura"
+import Hidrantes from "@/pages/hidrantes"
 
 /**
  * There is no login.
@@ -45,6 +47,7 @@ export default function App() {
         <Route path="/ocorrencias/:id" element={<OcorrenciaDetalhe />} />
         <Route path="/despachos" element={<Despachos />} />
         <Route path="/rotas" element={<Rotas />} />
+        <Route path="/cobertura" element={<Cobertura />} />
         <Route path="/estatisticas" element={<Estatisticas />} />
         <Route path="/rede-neural" element={<RedeNeural />} />
 
@@ -53,6 +56,7 @@ export default function App() {
         <Route path="/guarnicoes" element={<Guarnicoes />} />
         <Route path="/turnos" element={<Turnos />} />
         <Route path="/unidades" element={<Unidades />} />
+        <Route path="/hidrantes" element={<Hidrantes />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
