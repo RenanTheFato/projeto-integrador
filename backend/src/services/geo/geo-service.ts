@@ -131,12 +131,16 @@ export class GeoService {
     }
 
     const payload = await fetchJson(`${env.GEOCODER_URL}/api/?${params}`, "The geocoder")
-    // OSM splits a long avenue into many ways, and Photon returns each one;
-    // the dispatcher needs one line per distinct address, not five copies.
+    // OSM splits a long avenue into many ways, and Photon returns each one.
+    // Ways that share the address and the postcode are the same place to a
+    // dispatcher; a different postcode is a different stretch, worth keeping.
     const seen = new Set<string>()
     const places: Place[] = (payload.features ?? [])
       .map(toPlace)
-      .filter((place: Place) => !seen.has(place.label) && Boolean(seen.add(place.label)))
+      .filter((place: Place) => {
+        const key = `${place.label}|${place.postcode ?? ""}`
+        return !seen.has(key) && Boolean(seen.add(key))
+      })
       .slice(0, limit)
     searchCache.set(key, places)
     return { places }

@@ -3,6 +3,8 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom"
 import "./App.css"
 
 import Navbar from "@/components/layout/navbar"
+import { CommandPalette } from "@/components/layout/command-palette"
+import { CriticalAlerts } from "@/components/layout/critical-alert"
 
 import Painel from "@/pages/painel"
 import Ocorrencias from "@/pages/ocorrencias"
@@ -18,6 +20,8 @@ import Turnos from "@/pages/turnos"
 import Unidades from "@/pages/unidades"
 import Cobertura from "@/pages/cobertura"
 import Hidrantes from "@/pages/hidrantes"
+import Terminal from "@/pages/terminal"
+import Telao from "@/pages/telao"
 
 /**
  * There is no login.
@@ -31,6 +35,8 @@ function Shell() {
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
       <Navbar />
+      <CriticalAlerts />
+      <CommandPalette />
       <main className="flex-1">
         <Outlet />
       </main>
@@ -58,6 +64,12 @@ export default function App() {
         <Route path="/unidades" element={<Unidades />} />
         <Route path="/hidrantes" element={<Hidrantes />} />
       </Route>
+
+      {/* Screens for other devices: the tablet in the cab and the TV on the
+          wall. They carry their own chrome, sized for gloves and distance. */}
+      <Route path="/terminal" element={<Terminal />} />
+      <Route path="/terminal/:vehicleId" element={<Terminal />} />
+      <Route path="/telao" element={<Telao />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

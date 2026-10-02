@@ -4,16 +4,15 @@
  * when the backend says a line was written.
  */
 
-import { useCallback, useState } from "react"
+import { useState } from "react"
 import type { FormEvent } from "react"
 import { History, MessageSquarePlus } from "lucide-react"
 
 import { occurrences } from "@/api/endpoints"
-import type { TimelineEntry } from "@/api/types"
 import { ActionButton, Panel, TextInput } from "@/components/layout/kit"
 import { ErrorBox, LoadingBlock } from "@/components/layout/feedback"
-import { useRealtime } from "@/hooks/use-realtime"
-import { useMutation, useResource } from "@/hooks/use-resource"
+import type { useTimeline } from "@/hooks/use-timeline"
+import { useMutation } from "@/hooks/use-resource"
 import { eventTone, phraseEvent } from "@/lib/timeline-language"
 import { cn } from "@/lib/utils"
 
@@ -28,20 +27,6 @@ const DOT: Record<ReturnType<typeof eventTone>, string> = {
 const TIME = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
 const DAY = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
 
-export function useTimeline(occurrenceId: string) {
-  const timeline = useResource(() => occurrences.timeline(occurrenceId), [occurrenceId])
-  const reload = timeline.reload
-
-  useRealtime(useCallback((event) => {
-    const touches =
-      (event.type === "occurrence.timeline" && event.payload.occurrence_id === occurrenceId)
-      || (event.type === "dispatch.updated" && event.payload.occurrence_id === occurrenceId)
-      || (event.type === "occurrence.updated" && event.payload.id === occurrenceId)
-    if (touches) reload()
-  }, [occurrenceId, reload]))
-
-  return timeline
-}
 
 export function TimelinePanel({ occurrenceId, closed, timeline }: {
   occurrenceId: string
@@ -119,4 +104,3 @@ export function TimelinePanel({ occurrenceId, closed, timeline }: {
   )
 }
 
-export type { TimelineEntry }

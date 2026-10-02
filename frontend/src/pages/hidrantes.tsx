@@ -12,8 +12,8 @@ import type { FormEvent } from "react"
 import { Droplets, Pencil, Plus } from "lucide-react"
 
 import { ai, units, waterSources } from "@/api/endpoints"
-import { TONE } from "@/api/labels"
-import type { WaterSource, WaterSourceStatus, WaterSourceType } from "@/api/types"
+import { WATER_STATUS_LABEL, WATER_STATUS_TONE, WATER_TYPE_LABEL } from "@/api/labels"
+import type { WaterSource, WaterSourceStatus } from "@/api/types"
 import {
   ActionButton, Badge, Cell, ConfirmButton, Field, Modal, Page, PageHeader, Panel, Row, Select, StatBox, Table,
   TextArea, TextInput,
@@ -25,25 +25,6 @@ import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatDate, toNumber } from "@/lib/format"
 import { stationsOf } from "@/lib/geo"
 
-export const WATER_TYPE_LABEL: Record<WaterSourceType, string> = {
-  HIDRANTE_COLUNA: "Hidrante de coluna",
-  HIDRANTE_SUBTERRANEO: "Hidrante subterrâneo",
-  CISTERNA: "Cisterna",
-  RESERVATORIO: "Reservatório",
-  PONTO_CAPTACAO: "Ponto de captação",
-}
-
-export const WATER_STATUS_LABEL: Record<WaterSourceStatus, string> = {
-  OPERANTE: "Operante",
-  INOPERANTE: "Inoperante",
-  NAO_VERIFICADO: "Não verificado",
-}
-
-const WATER_STATUS_TONE: Record<WaterSourceStatus, string> = {
-  OPERANTE: TONE.ok,
-  INOPERANTE: TONE.alert,
-  NAO_VERIFICADO: TONE.warn,
-}
 
 const options = <K extends string>(labels: Record<K, string>) =>
   (Object.keys(labels) as K[]).map((value) => ({ value, label: labels[value] }))
@@ -58,6 +39,8 @@ export default function Hidrantes() {
   const list = useResource(() => waterSources.list({ status: (status || undefined) as WaterSourceStatus | undefined }), [status])
   const all = useResource(() => waterSources.list(), [])
   const remove = useMutation((id: string) => waterSources.remove(id))
+  // Read once: whether an inspection is overdue does not change while the page is open.
+  const [now] = useState(() => Date.now())
 
   const counts = useMemo(() => {
     const items = all.data ?? []
@@ -65,9 +48,9 @@ export default function Hidrantes() {
       total: items.length,
       working: items.filter((item) => item.status === "OPERANTE").length,
       broken: items.filter((item) => item.status === "INOPERANTE").length,
-      overdue: items.filter((item) => !item.last_inspection_at || Date.now() - new Date(item.last_inspection_at).getTime() > OVERDUE_MS).length,
+      overdue: items.filter((item) => !item.last_inspection_at || now - new Date(item.last_inspection_at).getTime() > OVERDUE_MS).length,
     }
-  }, [all.data])
+  }, [all.data, now])
 
   return (
     <Page>
@@ -110,7 +93,7 @@ export default function Hidrantes() {
         {list.data && list.data.length > 0 && (
           <Table headers={["Código", "Tipo", "Situação", "Endereço", "Vazão", "Última inspeção", "Unidade", "Ações"]}>
             {list.data.map((source) => {
-              const overdue = !source.last_inspection_at || Date.now() - new Date(source.last_inspection_at).getTime() > OVERDUE_MS
+              const overdue = !source.last_inspection_at || now - new Date(source.last_inspection_at).getTime() > OVERDUE_MS
               return (
                 <Row key={source.id}>
                   <Cell className="whitespace-nowrap font-mono font-semibold">{source.code}</Cell>

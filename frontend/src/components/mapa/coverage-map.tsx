@@ -15,6 +15,7 @@ import type { CoverageArea, CoveragePoint, CoverageStation, WaterSource } from "
 import { STYLE } from "./constants/constants"
 import { createMarker, createStationMarker } from "./map/markers"
 import { cn } from "@/lib/utils"
+import { POINT_COLOR, pointClass } from "./coverage-palette"
 
 import "./mapa.css"
 
@@ -23,19 +24,6 @@ const CENTER: [number, number] = [-45.5551, -23.0264]
 /** Fastest band darkest; the palette is the console's accent, never a rainbow. */
 const BAND_FILL = ["#0B63A5", "#3B86C0", "#8DB6D8", "#C4D9EA", "#DCE8F2", "#EDF3F8"]
 
-export const POINT_COLOR = {
-  covered: "#2F6A52",
-  late: "#B07A12",
-  outside: "#A32A20",
-  unknown: "#8496A5",
-}
-
-export function pointClass(point: Pick<CoveragePoint, "time_seconds">, targetMinutes: number, maxMinutes: number): keyof typeof POINT_COLOR {
-  if (point.time_seconds === null) return "unknown"
-  if (point.time_seconds <= targetMinutes * 60) return "covered"
-  if (point.time_seconds <= maxMinutes * 60) return "late"
-  return "outside"
-}
 
 const WATER_COLOR: Record<WaterSource["status"], string> = {
   OPERANTE: "#0E6E75",

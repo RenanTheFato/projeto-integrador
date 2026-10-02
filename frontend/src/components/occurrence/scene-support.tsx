@@ -11,47 +11,22 @@
 import { Camera, CloudRain, Droplets, ExternalLink, Hospital, Navigation2, Wind } from "lucide-react"
 
 import { geo, occurrences } from "@/api/endpoints"
-import type { Occurrence, WaterSourceStatus } from "@/api/types"
+import type { Occurrence } from "@/api/types"
 import { Badge, Panel } from "@/components/layout/kit"
 import { useResource } from "@/hooks/use-resource"
-import { TONE } from "@/api/labels"
+import { WATER_STATUS_LABEL, WATER_STATUS_TONE } from "@/api/labels"
 import { formatDistance, formatDuration, toNumber } from "@/lib/format"
 import { cardinal } from "@/lib/route-language"
+import { streetViewUrl, weatherLabel } from "@/lib/scene"
 
-const WEATHER_LABEL: [number[], string][] = [
-  [[0], "Céu limpo"],
-  [[1, 2], "Parcialmente nublado"],
-  [[3], "Nublado"],
-  [[45, 48], "Neblina"],
-  [[51, 53, 55, 56, 57], "Garoa"],
-  [[61, 63, 65, 66, 67, 80, 81, 82], "Chuva"],
-  [[95, 96, 99], "Trovoada"],
-]
 
-export function weatherLabel(code: number): string {
-  return WEATHER_LABEL.find(([codes]) => codes.includes(code))?.[1] ?? "Condição desconhecida"
-}
 
-const WATER_STATUS_LABEL: Record<WaterSourceStatus, string> = {
-  OPERANTE: "Operante",
-  INOPERANTE: "Inoperante",
-  NAO_VERIFICADO: "Não verificado",
-}
-
-const WATER_STATUS_TONE: Record<WaterSourceStatus, string> = {
-  OPERANTE: TONE.ok,
-  INOPERANTE: TONE.alert,
-  NAO_VERIFICADO: TONE.warn,
-}
 
 /** Natures where the patient may need a hospital after the crew arrives. */
 const NEEDS_HOSPITAL = new Set(["ATENDIMENTO_PRE_HOSPITALAR", "SALVAMENTO", "AFOGAMENTO", "PRODUTOS_PERIGOSOS", "INCENDIO_EDIFICACAO", "INCENDIO_VEICULO"])
 /** Natures where water supply matters. */
 const NEEDS_WATER = new Set(["INCENDIO_EDIFICACAO", "INCENDIO_VEGETACAO", "INCENDIO_VEICULO", "PRODUTOS_PERIGOSOS"])
 
-export function streetViewUrl(latitude: number, longitude: number): string {
-  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${latitude},${longitude}`
-}
 
 export function SceneSupport({ occurrence }: { occurrence: Occurrence }) {
   const latitude = toNumber(occurrence.latitude) ?? 0

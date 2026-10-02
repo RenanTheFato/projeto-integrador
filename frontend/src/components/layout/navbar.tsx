@@ -12,11 +12,13 @@
  */
 
 import { useEffect, useRef, useState } from "react"
-import { ChevronDown, Menu, Radio } from "lucide-react"
+import { ChevronDown, Menu, Radio, Search } from "lucide-react"
 import { Link, NavLink } from "react-router-dom"
 
 import zeno from "@/assets/Zeno.png"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { openCommandPalette } from "@/lib/palette-events"
+import { AlertToggle } from "@/components/layout/critical-alert"
 import { useRealtime } from "@/hooks/use-realtime"
 import { cn } from "@/lib/utils"
 
@@ -125,6 +127,16 @@ export default function Navbar() {
       </nav>
 
       <div className="flex items-center gap-3 sm:gap-4">
+        <button
+          type="button"
+          onClick={openCommandPalette}
+          className="flex items-center gap-2 rounded-sm border border-chrome-line px-2 py-1.5 text-chrome-muted transition-colors hover:text-white"
+          aria-label="Buscar tela ou ocorrência (Ctrl+K)"
+        >
+          <Search className="h-4 w-4" />
+          <kbd className="label-caps hidden 2xl:inline">Ctrl K</kbd>
+        </button>
+        <AlertToggle />
         <LiveIndicator connected={connected} />
         <Clock />
         <MobileNav />

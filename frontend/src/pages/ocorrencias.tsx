@@ -6,7 +6,7 @@
  * driven by the priority the backend stores.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import { Filter, MapPin, Plus, Search } from "lucide-react"
 import { Link, useSearchParams } from "react-router-dom"
@@ -42,17 +42,12 @@ export default function Ocorrencias() {
   // `?nova=1` opens the form straight away: it is where the keyboard shortcut
   // and the command palette land when a call comes in.
   const [searchParams, setSearchParams] = useSearchParams()
-  const [creating, setCreatingState] = useState(() => searchParams.get("nova") === "1")
+  const [creatingState, setCreatingState] = useState(false)
+  const creating = creatingState || searchParams.get("nova") === "1"
   const setCreating = useCallback((value: boolean) => {
     setCreatingState(value)
     if (!value && searchParams.has("nova")) setSearchParams({}, { replace: true })
   }, [searchParams, setSearchParams])
-
-  // Already on this screen when the shortcut fires: the initializer above has
-  // run, so the parameter is watched too.
-  useEffect(() => {
-    if (searchParams.get("nova") === "1") setCreatingState(true)
-  }, [searchParams])
 
   const list = useResource(
     () => occurrences.list({
@@ -149,7 +144,7 @@ export default function Ocorrencias() {
         />
       )}
 
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         {(list.data?.items ?? []).map((occurrence) => (
           <OccurrenceCard key={occurrence.id} occurrence={occurrence} />
         ))}
@@ -173,7 +168,7 @@ function OccurrenceCard({ occurrence }: { occurrence: Occurrence }) {
   return (
     <Link
       to={`/ocorrencias/${occurrence.id}`}
-      className="flex flex-col rounded-sm border border-line bg-surface transition-colors hover:border-accent/50 hover:bg-accent-soft sm:flex-row"
+      className="flex min-w-0 flex-col rounded-sm border border-line bg-surface transition-colors hover:border-accent/50 hover:bg-accent-soft sm:flex-row"
     >
       {/* Severity is a rail, not a fill. Fifteen filled cards is a wall of
           colour that says nothing; fifteen rails are a column the eye can run

@@ -173,7 +173,9 @@ export function Field({ label, hint, required, children }: {
   children: ReactNode
 }) {
   return (
-    <label className="flex flex-col gap-1">
+    // `min-w-0`: a select sized by its longest option must not widen the grid
+    // column it sits in past the screen of a phone.
+    <label className="flex min-w-0 flex-col gap-1">
       <span className="label-caps text-ink-muted">
         {label}
         {required && <span className="text-alert"> *</span>}
@@ -207,7 +209,7 @@ export function FieldButton({ children, className }: {
 }
 
 const CONTROL =
-  "rounded-sm border border-line bg-surface px-3 py-2 text-ink outline-none transition-colors " +
+  "min-w-0 max-w-full rounded-sm border border-line bg-surface px-3 py-2 text-ink outline-none transition-colors " +
   "placeholder:text-ink-soft focus:border-accent focus:ring-2 focus:ring-accent/20"
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
@@ -307,7 +309,11 @@ export function Cell({ children, className, title }: {
       data-label={stackLabel}
       className={cn("px-3 py-2.5 text-sm text-ink", className)}
     >
-      {children}
+      {/* On a phone the cell is a flex line of label and value; wrapping the
+          value keeps a cell with several spans as one item that can shrink,
+          instead of laying them side by side past the screen's edge. Above
+          `sm` the wrapper dissolves and the cell is an ordinary cell. */}
+      <div className="min-w-0 [overflow-wrap:anywhere] sm:contents">{children}</div>
     </td>
   )
 }

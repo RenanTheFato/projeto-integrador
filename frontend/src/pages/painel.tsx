@@ -128,7 +128,7 @@ export default function Painel() {
         />
       </div>
 
-      <div className="grid gap-4 sm:gap-5 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Panel
           title="Últimas ocorrências"
           icon={<Clock className="h-5 w-5" />}
