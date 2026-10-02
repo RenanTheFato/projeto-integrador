@@ -18,6 +18,8 @@ const envSchema = z.object({
   // como as politicas de uso desses servicos pedem.
   GEOCODER_URL: z.string().default("https://photon.komoot.io"),
   WEATHER_URL: z.string().default("https://api.open-meteo.com"),
+  // OSRM publico, so como referencia externa para comparar com a rota da IA.
+  ROUTER_URL: z.string().default("https://router.project-osrm.org"),
   GEO_USER_AGENT: z.string().default("ZENO-dispatch-console/1.0")
 })
 

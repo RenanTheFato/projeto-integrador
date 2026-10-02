@@ -90,4 +90,36 @@ describe("GeoService", () => {
     fetchMock.mockReturnValueOnce(Promise.reject(new TypeError("fetch failed")))
     await expect(service.reverse(-22.5, -45.1)).rejects.toThrow("The geocoder is unreachable")
   })
+
+  it("asks OSRM for the same trip and hands the line back latitude first", async () => {
+    fetchMock.mockReturnValueOnce(json({
+      code: "Ok",
+      routes: [{ distance: 1022.8, duration: 99.7, geometry: { coordinates: [[-45.5551, -23.0264], [-45.562, -23.033]] } }]
+    }))
+
+    const origin = { latitude: -23.0264, longitude: -45.5551 }
+    const destination = { latitude: -23.033, longitude: -45.562 }
+    const { route } = await service.referenceRoute(origin, destination)
+    const again = await service.referenceRoute(origin, destination)
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/route/v1/driving/-45.5551,-23.0264;-45.562,-23.033?")
+    expect(route).toEqual({
+      source: "OSRM",
+      distance_meters: 1023,
+      duration_seconds: 100,
+      geometry: [[-23.0264, -45.5551], [-23.033, -45.562]]
+    })
+    expect(again.route).toEqual(route)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("answers null when OSRM finds no road, and 503 when it is down", async () => {
+    fetchMock.mockReturnValueOnce(json({ code: "NoRoute", routes: [] }))
+    const { route } = await service.referenceRoute({ latitude: -23.1, longitude: -45.6 }, { latitude: -23.2, longitude: -45.7 })
+    expect(route).toBeNull()
+
+    fetchMock.mockReturnValueOnce(json({}, 429))
+    await expect(service.referenceRoute({ latitude: -23.3, longitude: -45.6 }, { latitude: -23.2, longitude: -45.7 }))
+      .rejects.toThrow("The reference router answered with status 429")
+  })
 })

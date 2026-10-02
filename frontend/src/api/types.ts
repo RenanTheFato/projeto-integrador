@@ -425,6 +425,14 @@ export interface Weather {
   weather_code: number
 }
 
+/** The same trip through OSRM, an outside engine used as a yardstick. */
+export interface ReferenceRoute {
+  source: "OSRM"
+  distance_meters: number
+  duration_seconds: number
+  geometry: [number, number][]
+}
+
 // -- Coverage ----------------------------------------------------------------
 
 export interface CoverageStation {

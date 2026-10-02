@@ -40,6 +40,11 @@ export interface Place {
   longitude: number
 }
 
+export interface Point {
+  latitude: number,
+  longitude: number
+}
+
 export interface Weather {
   observed_at: string,
   temperature_c: number,
@@ -52,7 +57,18 @@ export interface Weather {
   weather_code: number
 }
 
+/// A route from an independent engine (OSRM over the same OpenStreetMap data),
+/// used as an outside yardstick for the model's own estimate.
+export interface ReferenceRoute {
+  source: "OSRM",
+  distance_meters: number,
+  duration_seconds: number,
+  /// [latitude, longitude] pairs, the same order as the AI's geometry.
+  geometry: [number, number][]
+}
+
 const searchCache = new TtlCache<Place[]>(10 * 60_000)
+const referenceCache = new TtlCache<ReferenceRoute | null>(30 * 60_000)
 const weatherCache = new TtlCache<Weather>(10 * 60_000)
 let boundsCache: { value: GraphBounds | null, expires: number } | null = null
 
@@ -159,6 +175,31 @@ export class GeoService {
     const places: Place[] = (payload.features ?? []).map(toPlace)
     searchCache.set(key, places)
     return { place: places[0] ?? null }
+  }
+
+  /// The same trip through the public OSRM demo server. Null when OSRM finds
+  /// no road between the points, which is an answer, not an outage.
+  async referenceRoute(origin: Point, destination: Point): Promise<{ route: ReferenceRoute | null }> {
+    const key = [origin.latitude, origin.longitude, destination.latitude, destination.longitude].map((value) => value.toFixed(5)).join("|")
+    const cached = referenceCache.get(key)
+    if (cached !== undefined) return { route: cached }
+
+    // OSRM takes longitude first.
+    const coordinates = `${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}`
+    const payload = await fetchJson(
+      `${env.ROUTER_URL}/route/v1/driving/${coordinates}?overview=full&geometries=geojson&alternatives=false&steps=false`,
+      "The reference router"
+    )
+
+    const best = payload.code === "Ok" ? payload.routes?.[0] : null
+    const route: ReferenceRoute | null = best ? {
+      source: "OSRM",
+      distance_meters: Math.round(best.distance),
+      duration_seconds: Math.round(best.duration),
+      geometry: (best.geometry?.coordinates ?? []).map(([longitude, latitude]: [number, number]) => [latitude, longitude])
+    } : null
+    referenceCache.set(key, route)
+    return { route }
   }
 
   /// Current conditions at a point, through Open-Meteo (no key). Wind matters

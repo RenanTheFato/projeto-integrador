@@ -18,6 +18,7 @@ import {
 } from "@/components/layout/kit"
 import { ErrorBox, ErrorDetails } from "@/components/layout/feedback"
 import RouteMap from "@/components/mapa/route-map"
+import { RouteBenchmark } from "@/components/route/route-benchmark"
 import { RouteInsight } from "@/components/route/route-insight"
 import { RouteSteps } from "@/components/route/route-steps"
 import { useMutation, useResource } from "@/hooks/use-resource"
@@ -383,6 +384,8 @@ export default function Rotas() {
               {result.critical && <CriticalSummary preview={result.critical} />}
 
               <RouteInsight neural={result.neural} shortest={result.shortest} />
+
+              <RouteBenchmark key={`${result.neural.distance_meters}-${result.neural.estimated_time_seconds}`} neural={result.neural} />
 
             </>
           )}

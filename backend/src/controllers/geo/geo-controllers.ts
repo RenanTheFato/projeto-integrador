@@ -37,6 +37,27 @@ export class ReversePlaceController {
   }
 }
 
+export class ReferenceRouteController {
+  async handle(req: FastifyRequest, rep: FastifyReply) {
+    const querySchema = z.object({
+      origin_latitude: pointSchema.shape.latitude,
+      origin_longitude: pointSchema.shape.longitude,
+      destination_latitude: pointSchema.shape.latitude,
+      destination_longitude: pointSchema.shape.longitude
+    })
+
+    try {
+      const query = querySchema.parse(req.query)
+      return rep.status(200).send(await new GeoService().referenceRoute(
+        { latitude: query.origin_latitude, longitude: query.origin_longitude },
+        { latitude: query.destination_latitude, longitude: query.destination_longitude }
+      ))
+    } catch (error: unknown) {
+      return handleError(error, rep, "Reference route")
+    }
+  }
+}
+
 export class WeatherController {
   async handle(req: FastifyRequest, rep: FastifyReply) {
     try {

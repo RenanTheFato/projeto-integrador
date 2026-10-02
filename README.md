@@ -448,6 +448,7 @@ seção do frontend acima).
 | `/ai/routes`, `/ai/model`, `/ai/training` | Ponte com a IA (`/ai/routes` aceita `closures`: vias interditadas) |
 | `POST /ai/coverage` | Isócronas dos quartéis e quanto da demanda recente elas alcançam |
 | `/geo/search`, `/geo/reverse`, `/geo/weather` | Busca de endereço (Photon/OSM) e clima (Open-Meteo), sem chave |
+| `/geo/reference-route` | Mesmo trajeto no OSRM público, para comparar com a rota da IA (`ROUTER_URL` troca o servidor) |
 | `GET /realtime` | WebSocket com os eventos do despacho |
 
 O WebSocket transmite `occurrence.created`, `occurrence.updated`,

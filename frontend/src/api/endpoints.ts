@@ -10,7 +10,7 @@ import { api, query } from "./client"
 import type {
   Closure, Coverage, Crew, EtaAccuracy, CrewRole, Dispatch, DispatchStatus, Firefighter, FirefighterStatus, HospitalOption, ModelInfo,
   Occurrence, OccurrenceNature, OccurrencePriority, OccurrenceStatisticsRow, OccurrenceStatus, Paginated, Place, Rank,
-  RoutePreview, RouteVariant, Shift, ShiftType, TimelineEntry, TrainingRun, Unit, UnitType,
+  ReferenceRoute, RoutePreview, RouteVariant, Shift, ShiftType, TimelineEntry, TrainingRun, Unit, UnitType,
   Vehicle, VehicleRecommendation, VehicleStatus, VehicleType, OperationalStatistics, WaterSource, WaterSourceStatus,
   WaterSourceType, Weather,
 } from "./types"
@@ -401,6 +401,16 @@ export const geo = {
   async reverse(latitude: number, longitude: number): Promise<Place | null> {
     const data = await api.get<{ place: Place | null }>(`/geo/reverse${query({ latitude, longitude })}`)
     return data.place
+  },
+
+  async referenceRoute(origin: [number, number], destination: [number, number]): Promise<ReferenceRoute | null> {
+    const data = await api.get<{ route: ReferenceRoute | null }>(`/geo/reference-route${query({
+      origin_latitude: origin[0],
+      origin_longitude: origin[1],
+      destination_latitude: destination[0],
+      destination_longitude: destination[1],
+    })}`)
+    return data.route
   },
 
   async weather(latitude: number, longitude: number): Promise<Weather> {
