@@ -9,6 +9,7 @@ so it happens once at startup and every route calculation reuses the result.
 import os
 import sys
 import threading
+from collections import OrderedDict
 
 import networkx as nx
 import osmnx as ox
@@ -18,10 +19,12 @@ from shapely.geometry import LineString
 MACHINE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, MACHINE_ROOT)
 
+from api import coverage, maneuvers
+from api.closures import ClosureIndex, without
+from api.geometry import LocalProjection
 from src.neural.path_network import PathNetwork
 from src.pathfinding.pathfinder import (
     apply_neural_weights,
-    edge_between,
     get_city_graph,
     path_geometry,
 )
@@ -84,6 +87,11 @@ class RouteEngine:
         self._critical_graph = None
         self._model_version: str | None = None
         self._loaded = False
+        self._projection: LocalProjection | None = None
+        self._closures: dict[str, ClosureIndex] = {}
+        # Isochrones of the fixed stations are asked for on every visit to the
+        # coverage screen; they only change when the model does.
+        self._isochrone_cache: OrderedDict = OrderedDict()
 
     @property
     def loaded(self) -> bool:
@@ -307,9 +315,34 @@ class RouteEngine:
                 checkpoint["y_mean"], checkpoint["y_std"],
             )
 
+            self.use_graph(graph, str(checkpoint.get("version", os.path.getmtime(MODEL_PATH))))
+
+    def use_graph(self, graph, model_version: str) -> None:
+        """
+        Install an already weighted graph (every edge carrying `neural_cost`).
+
+        `load` goes through here after running the network; tests use it
+        directly with a small synthetic city, so they exercise the real
+        routing code without downloading Taubate or loading torch weights.
+        """
+        with self._lock:
+            latitudes = [data["y"] for _, data in graph.nodes(data=True)]
+            longitudes = [data["x"] for _, data in graph.nodes(data=True)]
+            projection = LocalProjection(
+                (min(latitudes) + max(latitudes)) / 2,
+                (min(longitudes) + max(longitudes)) / 2,
+            )
+            critical = self._build_critical_graph(graph)
+
             self._graph = graph
-            self._critical_graph = self._build_critical_graph(graph)
-            self._model_version = str(checkpoint.get("version", os.path.getmtime(MODEL_PATH)))
+            self._critical_graph = critical
+            self._projection = projection
+            self._closures = {
+                "neural_cost": ClosureIndex(graph, projection),
+                "critical_cost": ClosureIndex(critical, projection),
+            }
+            self._isochrone_cache.clear()
+            self._model_version = model_version
             self._loaded = True
 
     def reload(self) -> None:
@@ -317,49 +350,54 @@ class RouteEngine:
         self._loaded = False
         self.load()
 
-    def _variant(self, graph, origin_node, dest_node, weight: str) -> dict:
+    def _variant(self, graph, origin_node, dest_node, weight: str) -> tuple[dict, list[dict]]:
         """
-        One route, with its numbers and the line that draws it.
+        One route, with its numbers, the line that draws it and what it means.
 
-        Distance and geometry are accumulated in the same walk over the path so
-        that they can never disagree: both read from the edge `edge_between`
-        picked, and the drawn line now measures the same as the distance it
-        reports, because it follows the same curves the length was measured
-        along.
+        Distance, time, geometry, steps and segments all come from the same
+        walk over the path, so they can never disagree: every one of them reads
+        the edge the router picked for each pair of intersections, and the
+        drawn line measures the same as the distance it reports.
         """
         path = nx.shortest_path(graph, origin_node, dest_node, weight=weight)
-
-        distance_m = 0.0
-        time_s = 0.0
-        reverse_segments = 0
-        shoulder_segments = 0
         time_weight = "critical_cost" if weight == "critical_cost" else "neural_cost"
-
-        for u, v in zip(path, path[1:]):
-            edge = edge_between(graph, u, v, weight)
-            distance_m += edge.get("length", 0.0)
-            time_s += edge.get(time_weight, edge.get("neural_cost", 0.0))
-            if edge.get("critical_reverse"):
-                reverse_segments += 1
-            if edge.get("critical_uses_shoulder"):
-                shoulder_segments += 1
+        records = maneuvers.walk(graph, path, weight, time_weight)
 
         result = {
-            "distance_meters": round(distance_m),
-            "estimated_time_seconds": round(time_s, 2),
+            "distance_meters": round(sum(record["length"] for record in records)),
+            "estimated_time_seconds": round(sum(record["time"] for record in records), 2),
             # The number of intersections, not of drawn points: it is what the
             # interface labels "cruzamentos".
             "node_count": len(path),
             "geometry": path_geometry(graph, path, weight),
+            "steps": maneuvers.steps(records),
+            "segments": maneuvers.segments(records),
+            "composition": maneuvers.composition(records),
         }
 
         if weight == "critical_cost":
             result["critical_maneuvers"] = {
-                "counterflow_segments": reverse_segments,
-                "shoulder_segments": shoulder_segments,
+                "counterflow_segments": sum(1 for record in records if record["edge"].get("critical_reverse")),
+                "shoulder_segments": sum(1 for record in records if record["edge"].get("critical_uses_shoulder")),
             }
 
-        return result
+        return result, records
+
+    @staticmethod
+    def _shared_ratio(records: list[dict], other: list[dict]) -> float:
+        """Share of a route's distance that runs on the same streets as another."""
+        total = sum(record["length"] for record in records)
+        if total <= 0:
+            return 1.0
+        other_edges = {(record["u"], record["v"]) for record in other}
+        shared = sum(record["length"] for record in records if (record["u"], record["v"]) in other_edges)
+        return round(shared / total, 3)
+
+    def _restricted(self, graph, weight: str, closures: list[dict] | None):
+        if not closures:
+            return graph, 0
+        blocked = self._closures[weight].blocked_edges(closures)
+        return without(graph, blocked), len(blocked)
 
     def _snap(self, point: tuple[float, float], label: str):
         """Map a coordinate onto the nearest graph node, refusing far-away ones."""
@@ -375,16 +413,40 @@ class RouteEngine:
 
         return node
 
+    def _snap_many(self, points: list[tuple[float, float]]) -> list[tuple]:
+        """Snap many [latitude, longitude] points at once; far ones get node None."""
+        if not points:
+            return []
+        nodes, distances = ox.nearest_nodes(
+            self._graph,
+            [point[1] for point in points],
+            [point[0] for point in points],
+            return_dist=True,
+        )
+        return [
+            (node, float(distance)) if distance <= MAX_SNAP_DISTANCE_M else (None, float(distance))
+            for node, distance in zip(nodes, distances)
+        ]
+
+    def _weighted(self, critical_mode: bool):
+        if critical_mode:
+            return self._critical_graph, "critical_cost"
+        return self._graph, "neural_cost"
+
     def calculate(
         self,
         origin: tuple[float, float],
         destination: tuple[float, float],
         critical_mode: bool = False,
+        closures: list[dict] | None = None,
     ) -> dict:
         """
         Return both routes: the neural one (weighted by predicted travel time)
         and the shortest one in metres. Returning both is what lets the client
         show the comparison this project exists to demonstrate.
+
+        `closures` hides the edges inside each reported circle for this
+        request only; the loaded graph is never modified.
         """
         with self._lock:
             if not self._loaded:
@@ -393,34 +455,147 @@ class RouteEngine:
             origin_node = self._snap(origin, "origin")
             dest_node = self._snap(destination, "destination")
 
-            if not nx.has_path(self._graph, origin_node, dest_node):
+            graph, blocked = self._restricted(self._graph, "neural_cost", closures)
+
+            if not nx.has_path(graph, origin_node, dest_node):
+                if blocked:
+                    raise ValueError("The closures leave no route between these two points")
                 raise ValueError("No route exists between these two points")
 
-            normal = self._variant(
-                self._graph,
-                origin_node,
-                dest_node,
-                "neural_cost",
-            )
-            critical = self._variant(
-                self._critical_graph,
-                origin_node,
-                dest_node,
-                "critical_cost",
-            ) if critical_mode else None
+            normal, normal_records = self._variant(graph, origin_node, dest_node, "neural_cost")
+            shortest, shortest_records = self._variant(graph, origin_node, dest_node, "length")
+            normal["shared_with_shortest"] = self._shared_ratio(normal_records, shortest_records)
+
+            critical = None
+            if critical_mode:
+                critical_graph, _ = self._restricted(self._critical_graph, "critical_cost", closures)
+                critical, _ = self._variant(critical_graph, origin_node, dest_node, "critical_cost")
 
             return {
                 "neural": normal,
                 "critical": critical,
-                "shortest": self._variant(
-                    self._graph,
-                    origin_node,
-                    dest_node,
-                    "length",
-                ),
+                "shortest": shortest,
                 "critical_mode": critical_mode,
+                "closures": {"count": len(closures or []), "blocked_edges": blocked},
                 "model_version": self._model_version,
             }
+
+    def isochrones(
+        self,
+        origins: list[tuple[float, float]],
+        minutes: list[int],
+        critical_mode: bool = False,
+        points: list[tuple[float, float]] | None = None,
+    ) -> dict:
+        """
+        Area reachable from the nearest of the origins within each threshold.
+
+        With `points`, also reports how many of them fall inside each one, by
+        travel time over the network rather than by testing the polygon, so a
+        point across a river from a covered street is not counted.
+        """
+        with self._lock:
+            if not self._loaded:
+                raise RuntimeError("The route engine is still loading")
+
+            graph, weight = self._weighted(critical_mode)
+            # An origin outside the street network (a command post in another
+            # city) is skipped rather than failing the whole map; the caller is
+            # told which ones were left out.
+            snapped = self._snap_many(origins)
+            skipped = [index for index, (node, _) in enumerate(snapped) if node is None]
+            sources = sorted({node for node, _ in snapped if node is not None}, key=str)
+            if not sources:
+                raise ValueError(f"None of the origins is inside the area covered by {CITY}")
+            thresholds = sorted(set(minutes))
+            key = (tuple(sources), tuple(thresholds), critical_mode)
+
+            areas = self._isochrone_cache.get(key)
+            if areas is None:
+                areas = coverage.isochrones(graph, sources, weight, thresholds, self._projection)
+                self._isochrone_cache[key] = areas
+                if len(self._isochrone_cache) > 64:
+                    self._isochrone_cache.popitem(last=False)
+            else:
+                self._isochrone_cache.move_to_end(key)
+
+            result = {
+                "critical_mode": critical_mode,
+                "model_version": self._model_version,
+                "skipped_origins": skipped,
+                "isochrones": areas,
+            }
+
+            if points is not None:
+                # Searching well past the largest threshold lets the client
+                # show how late an uncovered point would be reached, not just
+                # that it is outside.
+                times = coverage.reach(graph, sources, weight, max(thresholds) * 60.0 * 3)
+                reached = coverage.point_times(times, self._snap_many(points))
+                result["points"] = {
+                    "total": len(points),
+                    "times_seconds": reached,
+                    "covered": {
+                        str(threshold): sum(
+                            1 for value in reached if value is not None and value <= threshold * 60
+                        )
+                        for threshold in thresholds
+                    },
+                }
+
+            return result
+
+    def travel_times(
+        self,
+        anchor: tuple[float, float],
+        points: list[tuple[float, float]],
+        direction: str = "to_anchor",
+        critical_mode: bool = False,
+        closures: list[dict] | None = None,
+    ) -> list[dict]:
+        """
+        Predicted time and distance between one anchor and many points.
+
+        `to_anchor` answers "which vehicle gets to this occurrence first": one
+        search over the reversed graph prices every vehicle at once.
+        `from_anchor` answers "which hospital is closest from here".
+        """
+        with self._lock:
+            if not self._loaded:
+                raise RuntimeError("The route engine is still loading")
+
+            base, weight = self._weighted(critical_mode)
+            graph, _ = self._restricted(base, weight, closures)
+            anchor_node = self._snap(anchor, "anchor")
+            search = graph.reverse(copy=False) if direction == "to_anchor" else graph
+
+            times, paths = nx.single_source_dijkstra(search, anchor_node, weight=weight)
+            output = []
+
+            for node, snap_distance in self._snap_many(points):
+                if node is None or node not in times:
+                    output.append({
+                        "reachable": False,
+                        "time_seconds": None,
+                        "distance_meters": None,
+                        "snap_distance_meters": round(snap_distance),
+                    })
+                    continue
+
+                distance = 0.0
+                path = paths[node]
+                for u, v in zip(path, path[1:]):
+                    cheapest = min(search[u][v].values(), key=lambda data: data.get(weight, float("inf")))
+                    distance += float(cheapest.get("length", 0.0))
+
+                output.append({
+                    "reachable": True,
+                    "time_seconds": round(times[node] + snap_distance / coverage.LAST_MILE_SPEED_MS, 1),
+                    "distance_meters": round(distance + snap_distance),
+                    "snap_distance_meters": round(snap_distance),
+                })
+
+            return output
 
 
 engine = RouteEngine()
