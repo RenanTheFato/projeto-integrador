@@ -18,6 +18,7 @@ import {
 import type { Occurrence, OccurrencePriority } from "@/api/types"
 import IncidentMap from "@/components/mapa/incident-map"
 import type { IncidentMapMode, IncidentPoint } from "@/components/mapa/incident-map"
+import type { LiveVehicle } from "@/components/mapa/map/vehicle-markers"
 import { OccurrenceAvatar } from "@/components/occurrence-icon"
 import { useRealtime } from "@/hooks/use-realtime"
 import { useResource } from "@/hooks/use-resource"
@@ -59,7 +60,15 @@ export default function Telao() {
   const reloadActive = active.reload
   const reload = useCallback(() => { reloadOpen(); reloadFleet(); reloadActive() }, [reloadOpen, reloadFleet, reloadActive])
 
+  // Position reports move the chips in place; refetching the whole fleet on
+  // every GPS ping would be wasteful.
+  const [moved, setMoved] = useState<Record<string, { latitude: number, longitude: number }>>({})
+
   const { connected } = useRealtime(useCallback((event) => {
+    if (event.type === "vehicle.moved") {
+      setMoved((current) => ({ ...current, [event.payload.id]: { latitude: Number(event.payload.latitude), longitude: Number(event.payload.longitude) } }))
+      return
+    }
     if (event.type !== "connected" && event.type !== "occurrence.timeline") reload()
   }, [reload]))
 
@@ -102,6 +111,17 @@ export default function Telao() {
   }), [calls])
 
   const stations = useMemo(() => stationsOf(unitList.data?.items), [unitList.data])
+
+  // Vehicles out of the station: on a call, or free but reporting a position
+  // away from home. A vehicle parked at its station adds nothing to the map.
+  const liveVehicles: LiveVehicle[] = useMemo(() => (fleet.data?.items ?? []).flatMap((vehicle) => {
+    const latest = moved[vehicle.id]
+    const latitude = latest?.latitude ?? toNumber(vehicle.current_latitude)
+    const longitude = latest?.longitude ?? toNumber(vehicle.current_longitude)
+    if (latitude === null || longitude === null) return []
+    if (vehicle.status !== "EMPENHADA" && !latest) return []
+    return [{ id: vehicle.id, prefix: vehicle.prefix, status: vehicle.status, latitude, longitude }]
+  }), [fleet.data, moved])
   const critical = calls.filter((call) => call.priority === "CRITICA").length
   const clock = new Date(now)
 
@@ -172,6 +192,7 @@ export default function Telao() {
             mode={mode}
             onModeChange={setMode}
             onOpen={(id) => navigate(`/ocorrencias/${id}`)}
+            vehicles={liveVehicles}
             className="h-full w-full"
           />
         </div>

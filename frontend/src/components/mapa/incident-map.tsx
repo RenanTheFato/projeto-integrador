@@ -32,6 +32,8 @@ import { STYLE } from "./constants/constants"
 import { fitBoundsOf, observeMapToolbar } from "./map/helpers"
 import { set3DEnvironment, setBuildingLayersVisibility } from "./map/layers"
 import { createStationMarker } from "./map/markers"
+import { syncVehicleMarkers } from "./map/vehicle-markers"
+import type { LiveVehicle } from "./map/vehicle-markers"
 import type { MapStation } from "./route-map"
 import { cn } from "@/lib/utils"
 
@@ -95,6 +97,8 @@ export interface IncidentMapProps {
   onModeChange: (mode: IncidentMapMode) => void
   /** Opening an incident from its popup. */
   onOpen?: (id: string) => void
+  /** Live vehicle positions, drawn as prefix chips (the wallboard's fleet). */
+  vehicles?: LiveVehicle[]
   className?: string
 }
 
@@ -141,7 +145,7 @@ const MODES: { value: IncidentMapMode, label: string, Icon: React.ElementType, t
 ]
 
 export default function IncidentMap({
-  incidents, clusters, stations, coverage, mode, onModeChange, onOpen, className,
+  incidents, clusters, stations, coverage, mode, onModeChange, onOpen, vehicles, className,
 }: IncidentMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -149,6 +153,7 @@ export default function IncidentMap({
   const mapRef = useRef<maplibregl.Map | null>(null)
   const popupRef = useRef<maplibregl.Popup | null>(null)
   const stationMarkers = useRef(new Map<string, maplibregl.Marker>())
+  const vehicleMarkers = useRef(new Map<string, maplibregl.Marker>())
 
   const [ready, setReady] = useState(false)
   const [loadingSlow, setLoadingSlow] = useState(false)
@@ -195,6 +200,7 @@ export default function IncidentMap({
     // Captured now: the cleanup must clear the collection this map filled, not
     // whatever the ref happens to hold at teardown.
     const markers = stationMarkers.current
+    const fleetMarkers = vehicleMarkers.current
 
     map.on("load", () => {
       window.clearTimeout(loadingTimer)
@@ -552,6 +558,8 @@ export default function IncidentMap({
       popupRef.current?.remove()
       popupRef.current = null
       markers.clear()
+      fleetMarkers.forEach((marker) => marker.remove())
+      fleetMarkers.clear()
       setReady(false)
       map.remove()
       mapRef.current = null
@@ -654,6 +662,12 @@ export default function IncidentMap({
       markers.clear()
     }
   }, [stationSignature, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    syncVehicleMarkers(map, vehicleMarkers.current, vehicles ?? [])
+  }, [vehicles, ready])
 
   // -- size ------------------------------------------------------------------
 

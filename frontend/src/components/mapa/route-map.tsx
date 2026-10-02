@@ -118,6 +118,8 @@ export interface RouteMapProps {
   closures?: Closure[]
   /** Change `key` to fly the camera to the point (e.g. a manoeuvre picked from the list). */
   focus?: { latitude: number, longitude: number, key: number } | null
+  /** Where the vehicle is now (GPS or simulation), drawn as its own marker. */
+  livePosition?: { latitude: number, longitude: number, label: string } | null
 }
 
 /**
@@ -195,6 +197,7 @@ export default function RouteMap({
   speedSegments,
   closures,
   focus,
+  livePosition,
 }: RouteMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -205,6 +208,7 @@ export default function RouteMap({
   const originMarker = useRef<maplibregl.Marker | null>(null)
   const destinationMarker = useRef<maplibregl.Marker | null>(null)
   const pinMarker = useRef<maplibregl.Marker | null>(null)
+  const liveMarker = useRef<maplibregl.Marker | null>(null)
   const stationMarkers = useRef(new Map<string, maplibregl.Marker>())
 
   const cancelOrbit = useRef<(() => void) | null>(null)
@@ -449,6 +453,7 @@ export default function RouteMap({
       originMarker.current = null
       destinationMarker.current = null
       pinMarker.current = null
+      liveMarker.current = null
       markers.clear()
       map.remove()
       mapRef.current = null
@@ -501,6 +506,23 @@ export default function RouteMap({
     if (!map || !ready) return
     setClosures(map, closures)
   }, [closures, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    if (!livePosition) {
+      liveMarker.current?.remove()
+      liveMarker.current = null
+      return
+    }
+    const at: LngLat = [livePosition.longitude, livePosition.latitude]
+    if (!liveMarker.current) {
+      liveMarker.current = createMarker(map, at, "#0E6E75", "▲", livePosition.label)
+    } else {
+      liveMarker.current.setLngLat(at)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [livePosition?.latitude, livePosition?.longitude, ready])
 
   useEffect(() => {
     const map = mapRef.current

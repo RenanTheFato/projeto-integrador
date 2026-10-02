@@ -23,7 +23,9 @@ import type { DispatchStatus, Vehicle } from "@/api/types"
 import { Badge } from "@/components/layout/kit"
 import { ErrorBox, FullPageSpinner } from "@/components/layout/feedback"
 import RouteMap from "@/components/mapa/route-map"
+import { RouteGuide } from "@/components/route/route-guide"
 import { RouteSteps } from "@/components/route/route-steps"
+import { useRouteSimulation } from "@/hooks/use-route-simulation"
 import { useRealtime } from "@/hooks/use-realtime"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatDistance, formatDuration, formatElapsed, toNumber } from "@/lib/format"
@@ -140,6 +142,14 @@ function VehicleTerminal({ vehicleId }: { vehicleId: string }) {
 
   const gps = useGpsShare(vehicleId)
 
+  // Declared before the early returns: the route is read through the latest
+  // occurrence detail, so the hooks see it as soon as it loads.
+  const loadedDispatch = occurrence.data?.dispatches?.find((item) => item.id === current?.id) ?? null
+  const loadedRoute = loadedDispatch?.used_route ?? loadedDispatch?.routes?.find((item) => item.id === loadedDispatch.used_route_id) ?? null
+  const simulation = useRouteSimulation(loadedRoute?.geometry ?? null, loadedRoute?.estimated_time_seconds ?? 0)
+  const livePosition = simulation.position ?? gps.position
+  useReportSimulatedPosition(vehicleId, simulation.position)
+
   if (vehicle.loading && !vehicle.data) return <div className="min-h-screen bg-chrome"><FullPageSpinner label="Abrindo terminal..." /></div>
   if (vehicle.error) return <div className="min-h-screen bg-chrome p-4"><ErrorBox message={vehicle.error} onRetry={vehicle.reload} /></div>
   if (!vehicle.data) return null
@@ -241,6 +251,7 @@ function VehicleTerminal({ vehicleId }: { vehicleId: string }) {
                 route={route?.geometry ?? null}
                 pin={!route && detail ? { latitude: toNumber(detail.latitude) ?? 0, longitude: toNumber(detail.longitude) ?? 0, label: "Ocorrência" } : null}
                 originLabel={vehicle.data.prefix}
+                livePosition={livePosition ? { latitude: livePosition[0], longitude: livePosition[1], label: `${vehicle.data.prefix} agora` } : null}
                 destinationLabel="Ocorrência"
                 className="h-[55vh] min-h-[320px] w-full"
                 emptyMessage="A rota aparece assim que a IA calcular o trajeto."
@@ -251,6 +262,9 @@ function VehicleTerminal({ vehicleId }: { vehicleId: string }) {
                     <span className="text-3xl font-semibold tabular-nums text-ink">{formatDuration(route.estimated_time_seconds)}</span>
                     <span className="text-ink-muted">{formatDistance(route.distance_meters)}</span>
                   </div>
+                )}
+                {route && (
+                  <RouteGuide geometry={route.geometry} steps={route.steps ?? []} position={livePosition} simulation={simulation} />
                 )}
                 {route && (
                   <div className="rounded-sm border border-line bg-surface p-3">
@@ -320,12 +334,26 @@ function NearbyForCrew({ occurrenceId }: { occurrenceId: string }) {
   )
 }
 
+/**
+ * Sends the simulated position like a tablet would, every few seconds, so the
+ * wallboard and the occurrence screens see the vehicle move.
+ */
+function useReportSimulatedPosition(vehicleId: string, position: [number, number] | null) {
+  const lastSent = useRef(0)
+  useEffect(() => {
+    if (!position || Date.now() - lastSent.current < 3000) return
+    lastSent.current = Date.now()
+    vehicles.update(vehicleId, { current_latitude: position[0], current_longitude: position[1] }).catch(() => undefined)
+  }, [vehicleId, position])
+}
+
 /** Shares the tablet's GPS with the backend while the crew keeps it on. */
 function useGpsShare(vehicleId: string) {
   const [sharing, setSharing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastSent, setLastSent] = useState<Date | null>(null)
   const [accuracy, setAccuracy] = useState<number | null>(null)
+  const [position, setPosition] = useState<[number, number] | null>(null)
   const lastSentAt = useRef(0)
 
   useEffect(() => {
@@ -335,6 +363,7 @@ function useGpsShare(vehicleId: string) {
       (position) => {
         setError(null)
         setAccuracy(position.coords.accuracy)
+        setPosition([position.coords.latitude, position.coords.longitude])
         if (Date.now() - lastSentAt.current < GPS_INTERVAL_MS) return
         lastSentAt.current = Date.now()
         vehicles.update(vehicleId, {
@@ -361,5 +390,5 @@ function useGpsShare(vehicleId: string) {
     setSharing((value) => !value)
   }
 
-  return { sharing, error, lastSent, accuracy, toggle }
+  return { sharing, error, lastSent, accuracy, toggle, position: sharing ? position : null }
 }
