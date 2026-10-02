@@ -8,10 +8,11 @@
 
 import { api, query } from "./client"
 import type {
-  Crew, CrewRole, Dispatch, DispatchStatus, Firefighter, FirefighterStatus, ModelInfo,
-  Occurrence, OccurrenceNature, OccurrencePriority, OccurrenceStatisticsRow, OccurrenceStatus, Paginated, Rank,
-  RoutePreview, RouteVariant, Shift, ShiftType, TrainingRun, Unit, UnitType,
-  Vehicle, VehicleStatus, VehicleType, OperationalStatistics,
+  Closure, Coverage, Crew, CrewRole, Dispatch, DispatchStatus, Firefighter, FirefighterStatus, HospitalOption, ModelInfo,
+  Occurrence, OccurrenceNature, OccurrencePriority, OccurrenceStatisticsRow, OccurrenceStatus, Paginated, Place, Rank,
+  RoutePreview, RouteVariant, Shift, ShiftType, TimelineEntry, TrainingRun, Unit, UnitType,
+  Vehicle, VehicleRecommendation, VehicleStatus, VehicleType, OperationalStatistics, WaterSource, WaterSourceStatus,
+  WaterSourceType, Weather,
 } from "./types"
 
 interface ListParams {
@@ -216,6 +217,36 @@ export const occurrences = {
     return data.occurrence
   },
 
+  async timeline(id: string): Promise<TimelineEntry[]> {
+    const data = await api.get<{ events: TimelineEntry[] }>(`/occurrences/${id}/timeline`)
+    return data.events
+  },
+
+  addNote: (id: string, input: { message: string, dispatch_id?: string }) =>
+    api.post<{ event: TimelineEntry }>(`/occurrences/${id}/notes`, input),
+
+  /** Available vehicles ranked by predicted arrival; nothing is written. */
+  recommendations: (id: string, input: { critical_mode?: boolean, closures?: Closure[], limit?: number } = {}) =>
+    api.post<{
+      occurrence_id: string,
+      nature: OccurrenceNature,
+      suitable_types: VehicleType[],
+      critical_mode: boolean,
+      recommendations: VehicleRecommendation[],
+    }>(`/occurrences/${id}/recommendations`, input),
+
+  async hospitals(id: string, criticalMode = false): Promise<HospitalOption[]> {
+    const data = await api.get<{ hospitals: HospitalOption[] }>(
+      `/occurrences/${id}/hospitals${query({ critical_mode: criticalMode || undefined })}`,
+    )
+    return data.hospitals
+  },
+
+  async waterSources(id: string, limit = 5): Promise<WaterSource[]> {
+    const data = await api.get<{ water_sources: WaterSource[] }>(`/occurrences/${id}/water-sources${query({ limit })}`)
+    return data.water_sources
+  },
+
   /**
    * Every occurrence matching the filters, not just the first page.
    *
@@ -322,14 +353,24 @@ export const ai = {
   calculateRoute: (input: {
     origin_unit_id?: string, origin_latitude?: number, origin_longitude?: number,
     destination_latitude: number, destination_longitude: number, dispatch_id?: string,
-    critical_mode?: boolean,
+    critical_mode?: boolean, closures?: Closure[],
   }) => api.post<{
     routes: RouteVariant[] | null,
     neural: RoutePreview,
     critical: RoutePreview | null,
     shortest: RoutePreview,
     critical_mode: boolean,
+    closures: { count: number, blocked_edges: number },
   }>("/ai/routes", input),
+
+  /** Isochrones of the stations and how much recent demand they reach. */
+  coverage: (input: {
+    minutes?: number[],
+    critical_mode?: boolean,
+    unit_ids?: string[],
+    extra_stations?: { latitude: number, longitude: number, label?: string }[],
+    sample_size?: number,
+  } = {}) => api.post<Coverage>("/ai/coverage", input),
 
   async startTraining(epochs: number): Promise<TrainingRun> {
     const data = await api.post<{ run: TrainingRun }>("/ai/training", { epochs })
@@ -345,4 +386,44 @@ export const ai = {
     const data = await api.get<Record<string, unknown>>(`/ai/training${query({ ...params })}`)
     return paginate<TrainingRun>(data, "runs")
   },
+}
+
+// -- Geo ---------------------------------------------------------------------
+
+export const geo = {
+  async search(text: string, signal?: AbortSignal): Promise<Place[]> {
+    const data = await api.get<{ places: Place[] }>(`/geo/search${query({ q: text })}`, signal)
+    return data.places
+  },
+
+  async reverse(latitude: number, longitude: number): Promise<Place | null> {
+    const data = await api.get<{ place: Place | null }>(`/geo/reverse${query({ latitude, longitude })}`)
+    return data.place
+  },
+
+  async weather(latitude: number, longitude: number): Promise<Weather> {
+    const data = await api.get<{ weather: Weather }>(`/geo/weather${query({ latitude, longitude })}`)
+    return data.weather
+  },
+}
+
+// -- Water sources -----------------------------------------------------------
+
+export const waterSources = {
+  async list(params: { unit_id?: string, status?: WaterSourceStatus, type?: WaterSourceType } = {}): Promise<WaterSource[]> {
+    const data = await api.get<{ water_sources: WaterSource[] }>(`/water-sources${query(params)}`)
+    return data.water_sources
+  },
+
+  async create(input: Record<string, unknown>): Promise<WaterSource> {
+    const data = await api.post<{ water_source: WaterSource }>("/water-sources", input)
+    return data.water_source
+  },
+
+  async update(id: string, input: Record<string, unknown>): Promise<WaterSource> {
+    const data = await api.patch<{ water_source: WaterSource }>(`/water-sources/${id}`, input)
+    return data.water_source
+  },
+
+  remove: (id: string) => api.delete<void>(`/water-sources/${id}`),
 }

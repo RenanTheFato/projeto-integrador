@@ -16,7 +16,7 @@ import {
 import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 
-import type { GraphBounds } from "@/api/types"
+import type { Closure, GraphBounds, RouteSegment } from "@/api/types"
 import type { CamMode } from "./types/types"
 import { STYLE, WAZE_PITCH, WAZE_ZOOM } from "./constants/constants"
 import { bearingBetween, measureRoute, toMapCoords } from "./routes/utils"
@@ -30,6 +30,7 @@ import {
 } from "./map/layers"
 import { startComparisonPlayback } from "./map/comparison-playback"
 import { fitBoundsOf, observeMapToolbar } from "./map/helpers"
+import { setClosures, setSpeedOverlay } from "./map/overlays"
 import { formatDistance } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -108,6 +109,15 @@ export interface RouteMapProps {
   comparisonSimulationRequest?: number
   /** Real estimated times; only their ratio is preserved in the compressed comparison playback. */
   comparisonSimulationTimes?: { primarySeconds: number, comparisonSeconds: number, criticalSeconds?: number }
+  /**
+   * Edges of the primary route with their predicted speed. When given, the
+   * route is painted by how freely the network expects traffic to flow.
+   */
+  speedSegments?: RouteSegment[] | null
+  /** Circles the dispatcher marked as blocked. */
+  closures?: Closure[]
+  /** Change `key` to fly the camera to the point (e.g. a manoeuvre picked from the list). */
+  focus?: { latitude: number, longitude: number, key: number } | null
 }
 
 /**
@@ -182,6 +192,9 @@ export default function RouteMap({
   simulationRequest = 0,
   comparisonSimulationRequest = 0,
   comparisonSimulationTimes,
+  speedSegments,
+  closures,
+  focus,
 }: RouteMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -476,6 +489,26 @@ export default function RouteMap({
     if (!map || !ready) return
     updateCoverageData(map, coverage)
   }, [coverage, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    setSpeedOverlay(map, speedSegments ? route : null, speedSegments)
+  }, [route, speedSegments, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    setClosures(map, closures)
+  }, [closures, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready || !focus) return
+    map.flyTo({ center: [focus.longitude, focus.latitude], zoom: Math.max(map.getZoom(), 16), duration: 700, essential: true })
+    // Only a new key means a new request; the coordinates alone may repeat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.key, ready])
 
   // The picked point gets its own pin so the click has visible feedback before
   // any route is calculated.

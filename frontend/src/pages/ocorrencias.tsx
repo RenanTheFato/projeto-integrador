@@ -6,12 +6,12 @@
  * driven by the priority the backend stores.
  */
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import { Filter, MapPin, Plus, Search } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 
-import { ai, occurrences, units } from "@/api/endpoints"
+import { ai, geo, occurrences, units } from "@/api/endpoints"
 import {
   NATURE_LABEL, OCCURRENCE_STATUS_LABEL, OCCURRENCE_STATUS_TONE,
   PRIORITY_LABEL, PRIORITY_TEXT_TONE, PRIORITY_TONE, optionsOf,
@@ -24,6 +24,7 @@ import {
 import { EmptyState, ErrorBox, ErrorDetails, LoadingBlock } from "@/components/layout/feedback"
 import RouteMap from "@/components/mapa/route-map"
 import { OccurrenceAvatar } from "@/components/occurrence-icon"
+import { AddressSearch } from "@/components/occurrence/address-search"
 import { useRealtime } from "@/hooks/use-realtime"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatDistance, formatElapsed, formatShort } from "@/lib/format"
@@ -38,7 +39,20 @@ export default function Ocorrencias() {
   const [priority, setPriority] = useState("")
   const [search, setSearch] = useState("")
   const [applied, setApplied] = useState("")
-  const [creating, setCreating] = useState(false)
+  // `?nova=1` opens the form straight away: it is where the keyboard shortcut
+  // and the command palette land when a call comes in.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [creating, setCreatingState] = useState(() => searchParams.get("nova") === "1")
+  const setCreating = useCallback((value: boolean) => {
+    setCreatingState(value)
+    if (!value && searchParams.has("nova")) setSearchParams({}, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  // Already on this screen when the shortcut fires: the initializer above has
+  // run, so the parameter is watched too.
+  useEffect(() => {
+    if (searchParams.get("nova") === "1") setCreatingState(true)
+  }, [searchParams])
 
   const list = useResource(
     () => occurrences.list({
@@ -204,6 +218,7 @@ function CreateOccurrenceModal({ onClose, onCreated }: { onClose: () => void, on
   const [priority, setPriority] = useState<string>("ALTA")
   const [unitId, setUnitId] = useState("")
   const [address, setAddress] = useState("")
+  const [addressFromMap, setAddressFromMap] = useState(false)
   const [latitude, setLatitude] = useState("-23.0264")
   const [longitude, setLongitude] = useState("-45.5551")
   const [description, setDescription] = useState("")
@@ -274,11 +289,15 @@ function CreateOccurrenceModal({ onClose, onCreated }: { onClose: () => void, on
           </Field>
         </div>
 
-        <Field label="Endereço" required>
-          <TextInput
+        <Field label="Endereço" required hint="Digite a rua e escolha na lista: o ponto vai para o mapa">
+          <AddressSearch
             required
             value={address}
-            onChange={(event) => setAddress(event.target.value)}
+            onChange={(value) => { setAddress(value); setAddressFromMap(false) }}
+            onPick={(place) => {
+              setLatitude(place.latitude.toFixed(6))
+              setLongitude(place.longitude.toFixed(6))
+            }}
             placeholder="Rua Jacques Félix, 451, Centro, Taubaté"
           />
         </Field>
@@ -302,6 +321,15 @@ function CreateOccurrenceModal({ onClose, onCreated }: { onClose: () => void, on
           onPick={(pickedLatitude, pickedLongitude) => {
             setLatitude(pickedLatitude.toFixed(6))
             setLongitude(pickedLongitude.toFixed(6))
+            // A click on the map fills the address too, unless the operator
+            // already typed one of their own.
+            if (address.trim() === "" || addressFromMap) {
+              geo.reverse(pickedLatitude, pickedLongitude)
+                .then((place) => {
+                  if (place) { setAddress(place.label); setAddressFromMap(true) }
+                })
+                .catch(() => undefined)
+            }
           }}
           pin={pointValid ? { ...point, label: "Local da ocorrência" } : null}
           stations={stations}

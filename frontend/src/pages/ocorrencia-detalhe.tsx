@@ -8,7 +8,7 @@
 
 import { useCallback, useMemo, useState } from "react"
 import type { FormEvent } from "react"
-import { ArrowLeft, Brain, MapPin, Pencil, Play, Route as RouteIcon, Send, Truck } from "lucide-react"
+import { ArrowLeft, Brain, ListOrdered, MapPin, Pencil, Play, Printer, Route as RouteIcon, Send, Sparkles, Truck } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 
 import { crews, dispatches, occurrences, units, vehicles } from "@/api/endpoints"
@@ -19,7 +19,7 @@ import {
   PRIORITY_LABEL, PRIORITY_TEXT_TONE, PRIORITY_TONE, VEHICLE_TYPE_LABEL, optionsOf,
 } from "@/api/labels"
 import type {
-  Dispatch, DispatchStatus, Occurrence, OccurrencePriority, OccurrenceStatus, RouteVariant,
+  Dispatch, DispatchStatus, Occurrence, OccurrencePriority, OccurrenceStatus, RouteStep, RouteVariant,
 } from "@/api/types"
 import {
   ActionButton, Badge, ConfirmButton, Field, Modal, Page, PageHeader, Panel, Select,
@@ -28,6 +28,12 @@ import {
 import { EmptyState, ErrorBox, ErrorDetails, FullPageSpinner } from "@/components/layout/feedback"
 import RouteMap from "@/components/mapa/route-map"
 import { OccurrenceAvatar } from "@/components/occurrence-icon"
+import { printOccurrenceReport } from "@/components/occurrence/print-report"
+import { SceneSupport } from "@/components/occurrence/scene-support"
+import { TimelinePanel, useTimeline } from "@/components/occurrence/timeline-panel"
+import { VehicleRecommendations } from "@/components/occurrence/vehicle-recommendations"
+import { RouteInsight } from "@/components/route/route-insight"
+import { RouteSteps } from "@/components/route/route-steps"
 import { useRealtime } from "@/hooks/use-realtime"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import {
@@ -41,6 +47,8 @@ export default function OcorrenciaDetalhe() {
   const [editing, setEditing] = useState(false)
   const [theater, setTheater] = useState(false)
   const [replayRequest, setReplayRequest] = useState(0)
+  const [explain, setExplain] = useState(false)
+  const [focus, setFocus] = useState<{ latitude: number, longitude: number, key: number } | null>(null)
 
   const detail = useResource(() => occurrences.get(id), [id], { enabled: Boolean(id) })
   const reload = detail.reload
@@ -62,6 +70,8 @@ export default function OcorrenciaDetalhe() {
   const unitList = useResource(() => units.list({ active: true }), [])
 
   const stations = useMemo(() => stationsOf(unitList.data?.items), [unitList.data])
+
+  const timeline = useTimeline(id)
 
   if (detail.loading && !detail.data) return <FullPageSpinner label="Carregando ocorrência..." />
   if (detail.error) return <Page><ErrorBox message={detail.error} onRetry={detail.reload} /></Page>
@@ -92,8 +102,17 @@ export default function OcorrenciaDetalhe() {
       <PageHeader
         title={`Ocorrência ${occurrence.protocol}`}
         subtitle={`${NATURE_LABEL[occurrence.nature]} — aberta ${formatElapsed(occurrence.opened_at)}`}
-        actions={!closed && (
+        actions={(
           <>
+            <ActionButton
+              tone="ghost"
+              onClick={() => printOccurrenceReport(occurrence, timeline.data ?? [])}
+              title="Relatório de atendimento para arquivo ou assinatura"
+            >
+              <Printer className="h-4 w-4" />
+              Imprimir relatório
+            </ActionButton>
+            {!closed && <>
             <ActionButton tone="neutral" onClick={() => setEditing(true)}>
               <Pencil className="h-4 w-4" />
               Editar
@@ -116,6 +135,7 @@ export default function OcorrenciaDetalhe() {
               <Send className="h-5 w-5" />
               Despachar viatura
             </ActionButton>
+            </>}
           </>
         )}
       />
@@ -176,15 +196,31 @@ export default function OcorrenciaDetalhe() {
         <Panel
           title={closed && usedRoute ? "Rota utilizada" : "Rota calculada"}
           icon={<RouteIcon className="h-5 w-5" />}
-          actions={closed && usedRoute ? (
-            <ActionButton
-              tone="neutral"
-              className="px-3 py-1.5 text-sm"
-              onClick={() => setReplayRequest((value) => value + 1)}
-            >
-              <Play className="h-4 w-4" />
-              Simular novamente
-            </ActionButton>
+          actions={displayedRoute ? (
+            <div className="flex flex-wrap gap-2">
+              {(displayedRoute.segments?.length ?? 0) > 0 && (
+                <ActionButton
+                  tone={explain ? "primary" : "neutral"}
+                  className="px-3 py-1.5 text-sm"
+                  aria-pressed={explain}
+                  onClick={() => setExplain((value) => !value)}
+                  title="Pinta a rota pela velocidade que a rede prevê em cada trecho"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Explicar
+                </ActionButton>
+              )}
+              {closed && usedRoute && (
+                <ActionButton
+                  tone="neutral"
+                  className="px-3 py-1.5 text-sm"
+                  onClick={() => setReplayRequest((value) => value + 1)}
+                >
+                  <Play className="h-4 w-4" />
+                  Simular novamente
+                </ActionButton>
+              )}
+            </div>
           ) : undefined}
         >
           {closed && usedRoute && (
@@ -208,6 +244,8 @@ export default function OcorrenciaDetalhe() {
             theater={theater}
             onTheaterToggle={() => setTheater((current) => !current)}
             simulationRequest={replayRequest}
+            speedSegments={explain ? displayedRoute?.segments ?? null : null}
+            focus={focus}
             originLabel="Saída da viatura"
             destinationLabel={`Ocorrência ${occurrence.protocol}`}
             className={theater
@@ -218,6 +256,21 @@ export default function OcorrenciaDetalhe() {
         </Panel>
 
         <RouteComparison neural={neural} shortest={shortest} />
+
+        {displayedRoute && (
+          <Panel title="Manobras" icon={<ListOrdered className="h-5 w-5" />}>
+            <RouteSteps
+              steps={displayedRoute.steps ?? []}
+              title={`${current?.vehicle?.prefix ?? "Viatura"} → Ocorrência ${occurrence.protocol}`}
+              summary={`${occurrence.address} · ${formatDistance(displayedRoute.distance_meters)} · ${formatDuration(displayedRoute.estimated_time_seconds)} estimados (${routeAlgorithmLabel(displayedRoute.algorithm)})`}
+              onSelect={(step: RouteStep) => setFocus({ latitude: step.location[0], longitude: step.location[1], key: Date.now() })}
+            />
+          </Panel>
+        )}
+
+        <SceneSupport occurrence={occurrence} />
+
+        <TimelinePanel occurrenceId={occurrence.id} closed={closed} timeline={timeline} />
 
         <Panel title="Despachos" icon={<Truck className="h-5 w-5" />}>
           {dispatchList.length === 0 && (
@@ -321,6 +374,8 @@ function RouteComparison({ neural, shortest }: { neural: RouteVariant | null, sh
           </p>
         )}
       </div>
+
+      <RouteInsight neural={neural} shortest={shortest} />
     </Panel>
   )
 }
@@ -466,6 +521,13 @@ function DispatchModal({ occurrence, onClose, onDispatched }: {
             {warning}
           </div>
         )}
+
+        <VehicleRecommendations
+          occurrenceId={occurrence.id}
+          criticalMode={criticalMode}
+          selectedId={vehicleId}
+          onChoose={(item) => { setVehicleId(item.vehicle.id); setCrewId(item.crew?.id ?? "") }}
+        />
 
         <Field label="Viatura disponível" required>
           <Select

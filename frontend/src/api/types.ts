@@ -188,6 +188,9 @@ export interface RouteVariant {
   node_count: number
   /** Coordinate pairs as [latitude, longitude] — the axis order MapLibre does not use. */
   geometry: [number, number][]
+  /** Null on routes stored before the AI returned them. */
+  steps?: RouteStep[] | null
+  segments?: RouteSegment[] | null
   model_version?: string | null
   dispatch_id?: string | null
   created_at: string
@@ -217,6 +220,12 @@ export interface RoutePreview {
   estimated_time_seconds: number
   node_count: number
   geometry: [number, number][]
+  steps: RouteStep[]
+  segments: RouteSegment[]
+  /** Metres driven on each class of road. */
+  composition: Record<RoadClass, number>
+  /** Neural variant only: share of its distance on the shortest route's streets. */
+  shared_with_shortest?: number
   critical_maneuvers?: {
     counterflow_segments: number
     shoulder_segments: number
@@ -286,4 +295,169 @@ export interface Paginated<T> {
   page: number
   per_page: number
   items: T[]
+}
+
+// -- Route analysis ----------------------------------------------------------
+
+/** One manoeuvre of the turn-by-turn list, as the AI structures it. */
+export interface RouteStep {
+  type: "depart" | "turn" | "continue" | "roundabout" | "arrive"
+  modifier: string | null
+  street: string | null
+  highway: string
+  distance_meters: number
+  time_seconds: number
+  /** [latitude, longitude] of the point where the manoeuvre happens. */
+  location: [number, number]
+  geometry_index: number
+  /** Depart step only: initial compass heading. */
+  bearing?: number
+}
+
+/** Predicted speed on one edge; `start`/`end` index into the geometry. */
+export interface RouteSegment {
+  start: number
+  end: number
+  length_meters: number
+  time_seconds: number
+  speed_kmh: number
+  limit_kmh: number
+  highway: string
+  street: string | null
+  counterflow: boolean
+  shoulder: boolean
+}
+
+export type RoadClass = "highway" | "primary" | "secondary" | "tertiary" | "local"
+
+/** A street the dispatcher reported blocked, avoided for one calculation. */
+export interface Closure {
+  latitude: number
+  longitude: number
+  radius_m: number
+}
+
+// -- Occurrence support ------------------------------------------------------
+
+export type OccurrenceEventType =
+  | "ABERTURA" | "STATUS" | "PRIORIDADE" | "DESPACHO" | "DESPACHO_STATUS" | "ROTA" | "NOTA"
+
+export interface TimelineEntry {
+  id: string
+  type: OccurrenceEventType
+  at: string
+  message: string | null
+  from_value: string | null
+  to_value: string | null
+  dispatch_id: string | null
+  vehicle_prefix: string | null
+  derived: boolean
+}
+
+export interface VehicleRecommendation {
+  rank: number
+  vehicle: { id: string, prefix: string, type: VehicleType, model: string, water_capacity_liters: number | null }
+  unit: { id: string, acronym: string, name: string }
+  crew: { id: string, name: string, members: number, commander: string | null } | null
+  origin: { latitude: number, longitude: number, source: "current_position" | "station" }
+  suitable: boolean
+  ready: boolean
+  reachable: boolean
+  eta_seconds: number | null
+  distance_meters: number | null
+}
+
+export interface HospitalOption {
+  id: string
+  name: string
+  latitude: number
+  longitude: number
+  emergency: boolean
+  phone: string | null
+  reachable: boolean
+  eta_seconds: number | null
+  distance_meters: number | null
+}
+
+export type WaterSourceType =
+  | "HIDRANTE_COLUNA" | "HIDRANTE_SUBTERRANEO" | "CISTERNA" | "RESERVATORIO" | "PONTO_CAPTACAO"
+
+export type WaterSourceStatus = "OPERANTE" | "INOPERANTE" | "NAO_VERIFICADO"
+
+export interface WaterSource {
+  id: string
+  code: string
+  type: WaterSourceType
+  status: WaterSourceStatus
+  address: string
+  latitude: string | number
+  longitude: string | number
+  flow_lpm: number | null
+  notes: string | null
+  last_inspection_at: string | null
+  unit_id: string
+  unit?: Pick<Unit, "id" | "acronym" | "name"> | null
+  /** Only on the nearest-to-occurrence list. */
+  distance_meters?: number
+}
+
+export interface Place {
+  label: string
+  street: string | null
+  number: string | null
+  district: string | null
+  city: string | null
+  postcode: string | null
+  kind: string | null
+  latitude: number
+  longitude: number
+}
+
+export interface Weather {
+  observed_at: string
+  temperature_c: number
+  humidity_percent: number
+  precipitation_mm: number
+  wind_speed_kmh: number
+  wind_gusts_kmh: number
+  /** Where the wind comes from, in degrees. */
+  wind_direction_deg: number
+  weather_code: number
+}
+
+// -- Coverage ----------------------------------------------------------------
+
+export interface CoverageStation {
+  id: string
+  acronym: string
+  name: string
+  latitude: number
+  longitude: number
+  hypothetical: boolean
+  in_network: boolean
+}
+
+export interface CoverageArea {
+  minutes: number
+  area_km2: number
+  reached_nodes: number
+  geometry: { type: "MultiPolygon", coordinates: number[][][][] } | null
+}
+
+export interface CoveragePoint {
+  id: string
+  latitude: number
+  longitude: number
+  priority: OccurrencePriority
+  nature: OccurrenceNature
+  time_seconds: number | null
+}
+
+export interface Coverage {
+  critical_mode: boolean
+  minutes: number[]
+  model_version: string | null
+  stations: CoverageStation[]
+  isochrones: CoverageArea[]
+  demand: { sample_size: number, covered: Record<string, number>, points: CoveragePoint[] } | null
 }

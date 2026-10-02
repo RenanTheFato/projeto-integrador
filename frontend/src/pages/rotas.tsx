@@ -9,15 +9,17 @@
 
 import { useMemo, useState } from "react"
 import type { FormEvent } from "react"
-import { Brain, Compass, MapPin, Play, Route as RouteIcon } from "lucide-react"
+import { Ban, Brain, Compass, ListOrdered, MapPin, Play, Route as RouteIcon, Sparkles, X } from "lucide-react"
 
 import { ai, units } from "@/api/endpoints"
-import type { RoutePreview } from "@/api/types"
+import type { Closure, RoutePreview, RouteStep } from "@/api/types"
 import {
   ActionButton, Field, Page, PageHeader, Panel, Select, TextInput,
 } from "@/components/layout/kit"
 import { ErrorBox, ErrorDetails } from "@/components/layout/feedback"
 import RouteMap from "@/components/mapa/route-map"
+import { RouteInsight } from "@/components/route/route-insight"
+import { RouteSteps } from "@/components/route/route-steps"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatCoordinate, formatDistance, formatDuration } from "@/lib/format"
 import { nearestTo, stationsOf } from "@/lib/geo"
@@ -36,6 +38,16 @@ export default function Rotas() {
   const [destinationLongitude, setDestinationLongitude] = useState(DEFAULT_DESTINATION.longitude)
   const [criticalMode, setCriticalMode] = useState(false)
 
+  // A click on the map either moves the destination or blocks a street,
+  // depending on which tool is armed. Closures are local to this screen and
+  // travel with every calculation until removed.
+  const [tool, setTool] = useState<"destination" | "closure">("destination")
+  const [closureRadius, setClosureRadius] = useState("40")
+  const [closures, setClosures] = useState<Closure[]>([])
+  const [explain, setExplain] = useState(false)
+  const [stepsOf, setStepsOf] = useState<"neural" | "critical" | "shortest">("neural")
+  const [focus, setFocus] = useState<{ latitude: number, longitude: number, key: number } | null>(null)
+
   const calculate = useMutation(ai.calculateRoute)
   const [result, setResult] = useState<{
     neural: RoutePreview
@@ -43,6 +55,8 @@ export default function Rotas() {
     shortest: RoutePreview
     criticalMode: boolean
     originLabel: string
+    blockedEdges: number
+    closureCount: number
   } | null>(null)
   const [comparisonSimulationRequest, setComparisonSimulationRequest] = useState(0)
 
@@ -97,8 +111,16 @@ export default function Rotas() {
   const nearestIsOrigin = originMode === "unit" && nearest?.item.id === unitId
 
   function handlePick(latitude: number, longitude: number) {
+    if (tool === "closure") {
+      setClosures((current) => [...current, { latitude, longitude, radius_m: Number(closureRadius) }].slice(-20))
+      return
+    }
     setDestinationLatitude(latitude.toFixed(6))
     setDestinationLongitude(longitude.toFixed(6))
+  }
+
+  function focusStep(step: RouteStep) {
+    setFocus({ latitude: step.location[0], longitude: step.location[1], key: Date.now() })
   }
 
   function handleStationSelect(id: string) {
@@ -116,6 +138,7 @@ export default function Rotas() {
       destination_latitude: Number(destinationLatitude),
       destination_longitude: Number(destinationLongitude),
       critical_mode: criticalMode,
+      closures: closures.length > 0 ? closures : undefined,
     })
 
     if (answer) {
@@ -125,7 +148,10 @@ export default function Rotas() {
         shortest: answer.shortest,
         criticalMode: answer.critical_mode,
         originLabel: originMode === "unit" ? stations.find((station) => station.id === unitId)?.acronym ?? "Origem" : "Origem",
+        blockedEdges: answer.closures?.blocked_edges ?? 0,
+        closureCount: answer.closures?.count ?? 0,
       })
+      setStepsOf(answer.critical_mode && answer.critical ? "critical" : "neural")
     }
   }
 
@@ -236,6 +262,16 @@ export default function Rotas() {
             </p>
           )}
 
+          <ClosureTools
+            tool={tool}
+            onTool={setTool}
+            radius={closureRadius}
+            onRadius={setClosureRadius}
+            closures={closures}
+            onRemove={(index) => setClosures((current) => current.filter((_, position) => position !== index))}
+            onClear={() => setClosures([])}
+          />
+
           <div className="route-submit-row">
             <details className="route-detail-note"><summary>{model.data ? `Área de cálculo · ${model.data.city}` : "Sobre a área de cálculo"}</summary><p>
               {model.data
@@ -256,14 +292,26 @@ export default function Rotas() {
           title="Mapa de deslocamento"
           icon={<RouteIcon className="h-5 w-5" />}
           actions={result ? (
-            <ActionButton
-              tone="neutral"
-              className="px-3 py-1.5 text-sm"
-              onClick={() => setComparisonSimulationRequest((value) => value + 1)}
-            >
-              <Play className="h-4 w-4" />
-              Comparar viaturas
-            </ActionButton>
+            <div className="flex flex-wrap gap-2">
+              <ActionButton
+                tone={explain ? "primary" : "neutral"}
+                className="px-3 py-1.5 text-sm"
+                aria-pressed={explain}
+                onClick={() => setExplain((value) => !value)}
+                title="Pinta a rota da IA pela velocidade que a rede prevê em cada trecho"
+              >
+                <Sparkles className="h-4 w-4" />
+                Explicar
+              </ActionButton>
+              <ActionButton
+                tone="neutral"
+                className="px-3 py-1.5 text-sm"
+                onClick={() => setComparisonSimulationRequest((value) => value + 1)}
+              >
+                <Play className="h-4 w-4" />
+                Comparar viaturas
+              </ActionButton>
+            </div>
           ) : undefined}
         >
           {result && (
@@ -302,6 +350,9 @@ export default function Rotas() {
             theater={theater}
             onTheaterToggle={() => setTheater((current) => !current)}
             comparisonSimulationRequest={comparisonSimulationRequest}
+            speedSegments={explain ? result?.neural.segments ?? null : null}
+            closures={closures}
+            focus={focus}
             comparisonSimulationTimes={result ? {
               primarySeconds: result.neural.estimated_time_seconds,
               comparisonSeconds: result.shortest.estimated_time_seconds,
@@ -323,14 +374,115 @@ export default function Rotas() {
             <>
               <RoutePerformance neural={result.neural} critical={result.critical} shortest={result.shortest} />
 
+              {result.closureCount > 0 && (
+                <p className="rounded-sm border border-alert/25 bg-alert-soft px-3 py-2 text-sm text-ink">
+                  {result.closureCount} interdição(ões) respeitada(s): {result.blockedEdges} trecho(s) de rua fora do cálculo.
+                </p>
+              )}
+
               {result.critical && <CriticalSummary preview={result.critical} />}
 
+              <RouteInsight neural={result.neural} shortest={result.shortest} />
 
             </>
           )}
         </Panel>
       </div>
+
+      {result && (
+        <Panel
+          title="Manobras"
+          icon={<ListOrdered className="h-5 w-5" />}
+          actions={(
+            <div className="route-metric-tabs" aria-label="Percurso das manobras">
+              <button type="button" aria-pressed={stepsOf === "neural"} onClick={() => setStepsOf("neural")}>IA</button>
+              {result.critical && (
+                <button type="button" aria-pressed={stepsOf === "critical"} onClick={() => setStepsOf("critical")}>Modo crítico</button>
+              )}
+              <button type="button" aria-pressed={stepsOf === "shortest"} onClick={() => setStepsOf("shortest")}>Padrão</button>
+            </div>
+          )}
+        >
+          <RouteSteps
+            steps={(stepsOf === "critical" ? result.critical ?? result.neural : result[stepsOf]).steps ?? []}
+            title={`${result.originLabel} → destino (${stepsOf === "critical" ? "modo crítico" : stepsOf === "neural" ? "IA" : "rota padrão"})`}
+            summary={`${formatDistance((stepsOf === "critical" ? result.critical ?? result.neural : result[stepsOf]).distance_meters)} · ${formatDuration((stepsOf === "critical" ? result.critical ?? result.neural : result[stepsOf]).estimated_time_seconds)} estimados`}
+            onSelect={focusStep}
+          />
+        </Panel>
+      )}
     </Page>
+  )
+}
+
+const CLOSURE_RADII = [
+  { value: "25", label: "25 m — um trecho de quadra" },
+  { value: "40", label: "40 m — um cruzamento" },
+  { value: "80", label: "80 m — uma quadra" },
+  { value: "150", label: "150 m — várias quadras" },
+  { value: "300", label: "300 m — uma área" },
+]
+
+/**
+ * The closure tool: arm it, click the map where the street is blocked. Each
+ * circle hides every street segment inside it from the next calculation.
+ */
+function ClosureTools({ tool, onTool, radius, onRadius, closures, onRemove, onClear }: {
+  tool: "destination" | "closure"
+  onTool: (tool: "destination" | "closure") => void
+  radius: string
+  onRadius: (value: string) => void
+  closures: Closure[]
+  onRemove: (index: number) => void
+  onClear: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-sm border border-line bg-surface-muted px-4 py-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1">
+          <span className="label-caps text-ink-muted">Clique no mapa para</span>
+          <div className="route-metric-tabs" aria-label="Ferramenta do mapa">
+            <button type="button" aria-pressed={tool === "destination"} onClick={() => onTool("destination")}>
+              Marcar destino
+            </button>
+            <button type="button" aria-pressed={tool === "closure"} onClick={() => onTool("closure")}>
+              Interditar via
+            </button>
+          </div>
+        </div>
+
+        {tool === "closure" && (
+          <Field label="Raio da interdição">
+            <Select value={radius} onChange={onRadius} options={CLOSURE_RADII} />
+          </Field>
+        )}
+
+        {closures.length > 0 && (
+          <button type="button" onClick={onClear} className="ml-auto text-sm font-semibold text-alert underline underline-offset-2">
+            Remover todas
+          </button>
+        )}
+      </div>
+
+      {closures.length === 0 ? (
+        <p className="text-sm text-ink-muted">
+          <Ban className="mr-1 inline h-4 w-4 text-ink-soft" />
+          Nenhuma via interditada. Use “Interditar via” para marcar desabamento, alagamento ou acidente: a rota contorna o trecho.
+        </p>
+      ) : (
+        <ul className="flex flex-wrap gap-2">
+          {closures.map((closure, index) => (
+            <li key={`${closure.latitude}-${closure.longitude}-${index}`} className="inline-flex items-center gap-2 rounded-sm border border-alert/30 bg-alert-soft px-2 py-1 text-sm text-ink">
+              <Ban className="h-3.5 w-3.5 text-alert" />
+              {closure.latitude.toFixed(4)}, {closure.longitude.toFixed(4)} · {closure.radius_m} m
+              <button type="button" onClick={() => onRemove(index)} aria-label="Remover interdição" className="text-ink-muted hover:text-alert">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 

@@ -253,7 +253,8 @@ function LiveFeed() {
   const [events, setEvents] = useState<{ id: number, text: string, at: Date }[]>([])
 
   const { connected } = useRealtime((event) => {
-    if (event.type === "connected") return
+    // The timeline ping only tells a detail screen to refetch; it is not news.
+    if (event.type === "connected" || event.type === "occurrence.timeline") return
 
     const text =
       event.type === "occurrence.created" ? `Nova ocorrência ${event.payload.protocol}` :
