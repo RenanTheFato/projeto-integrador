@@ -423,6 +423,10 @@ Ele é determinístico e grava um backup do que vai apagar em `backend/.backups/
 antes de mexer. **Atenção:** apagar uma ocorrência arrasta seus despachos e as
 rotas calculadas para eles.
 
+O OpenStreetMap não tem hidrantes mapeados em Taubaté. Para a demonstração,
+`npm run seed:water-sources` grava 42 hidrantes em cruzamentos reais de vias
+principais, marcados nas observações como cenário demonstrativo.
+
 ### Principais rotas da API
 
 Nenhuma exige autenticação: o console é aberto por decisão de projeto (veja a
@@ -436,12 +440,18 @@ seção do frontend acima).
 | `/crews` | Guarnições |
 | `/shifts` | Escalas de plantão |
 | `/occurrences` | Ocorrências |
+| `/occurrences/:id/timeline`, `POST /occurrences/:id/notes` | Linha do tempo da ocorrência e notas do operador |
+| `POST /occurrences/:id/recommendations` | Viaturas disponíveis ordenadas pelo tempo de chegada previsto pela IA |
+| `/occurrences/:id/hospitals`, `/occurrences/:id/water-sources` | Hospitais por tempo de ida e pontos de água mais próximos |
 | `/dispatches` | Despacho de viatura para a ocorrência |
-| `/ai/routes`, `/ai/model`, `/ai/training` | Ponte com a IA |
+| `/water-sources` | Cadastro de hidrantes, cisternas e pontos de captação |
+| `/ai/routes`, `/ai/model`, `/ai/training` | Ponte com a IA (`/ai/routes` aceita `closures`: vias interditadas) |
+| `POST /ai/coverage` | Isócronas dos quartéis e quanto da demanda recente elas alcançam |
+| `/geo/search`, `/geo/reverse`, `/geo/weather` | Busca de endereço (Photon/OSM) e clima (Open-Meteo), sem chave |
 | `GET /realtime` | WebSocket com os eventos do despacho |
 
 O WebSocket transmite `occurrence.created`, `occurrence.updated`,
-`dispatch.created`, `dispatch.updated` e `vehicle.moved`. Basta abrir
+`occurrence.timeline`, `dispatch.created`, `dispatch.updated` e `vehicle.moved`. Basta abrir
 `ws://localhost:3333/api/v1/realtime` — não há handshake de autenticação.
 
 ### Ciclo de vida de um despacho
@@ -489,6 +499,17 @@ npm test              # roda a suite uma vez
 npm run test:watch    # modo watch
 npm run test:coverage # com relatório de cobertura
 ```
+
+Os outros dois módulos têm as suas suítes:
+
+```bash
+cd machine/ && poetry run pytest -q    # engine de rotas numa cidade sintética, sem baixar o mapa
+cd frontend/ && npm test               # linguagem das manobras, linha do tempo, paleta, cobertura
+cd frontend/ && npm run test:e2e       # Playwright em 1440 px e 360 px, com a stack no ar
+```
+
+O GitHub Actions (`.github/workflows/ci.yml`) roda backend, frontend e IA a
+cada push.
 
 Cobrem as regras de negócio dos services — hierarquia e ciclos em `Unit`,
 unicidade de CPF/matrícula/placa, a máquina de estados de `Dispatch` e

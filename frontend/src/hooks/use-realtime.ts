@@ -5,7 +5,7 @@
  * events subscribes to the same connection instead of opening its own.
  */
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { realtimeUrl } from "@/api/client"
 
@@ -87,7 +87,8 @@ function disconnectIfIdle() {
  */
 export function useRealtime(onEvent: (event: RealtimeEvent) => void) {
   const handlerRef = useRef(onEvent)
-  handlerRef.current = onEvent
+  // Updated after render, never during it; events only arrive later anyway.
+  useLayoutEffect(() => { handlerRef.current = onEvent })
 
   const [isConnected, setIsConnected] = useState(connected)
 
