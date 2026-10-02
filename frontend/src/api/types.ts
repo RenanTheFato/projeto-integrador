@@ -37,7 +37,7 @@ export type OccurrenceStatus =
 export type DispatchStatus =
   | "DESPACHADO" | "A_CAMINHO" | "NO_LOCAL" | "RETORNANDO" | "FINALIZADO" | "CANCELADO"
 
-export type RouteAlgorithm = "NEURAL" | "DIJKSTRA"
+export type RouteAlgorithm = "NEURAL" | "CRITICAL" | "DIJKSTRA"
 
 export type TrainingStatus = "PENDENTE" | "EXECUTANDO" | "CONCLUIDO" | "FALHOU"
 
@@ -139,6 +139,43 @@ export interface Occurrence {
   dispatches?: Dispatch[]
 }
 
+export interface OccurrenceStatisticsRow {
+  id: string
+  protocol: string
+  nature: OccurrenceNature
+  priority: OccurrencePriority
+  status: OccurrenceStatus
+  address: string
+  latitude: string | number
+  longitude: string | number
+  opened_at: string
+  closed_at?: string | null
+  first_arrived_at?: string | null
+  unit?: Pick<Unit, "id" | "acronym"> | null
+}
+
+export interface OperationalStatistics {
+  dispatched_incidents: number
+  joint_operations: number
+  without_dispatch: number
+  units: {
+    id: string; acronym: string; responsible: number; incidents: number; deployments: number;
+    cancelled: number; arrived: number; critical: number; vehicles: number; crews: number; joint_operations: number;
+    response_seconds: number | null; response_samples: number; response_p90_seconds: number | null;
+    travel_seconds: number | null; commitment_seconds: number | null; commitment_samples: number;
+    recorded_routes: number; distance_meters: number; estimated_seconds: number | null;
+    algorithms: Record<string, number>; natures: { nature: string; count: number }[];
+  }[]
+  cooperation: { units: string[]; incidents: number }[]
+  ledger_limit: number
+  ledger: {
+    id: string; occurrence_id: string; protocol: string; nature: string; unit_id: string; unit: string;
+    participants: string[]; vehicle: string; status: string; critical_mode: boolean;
+    dispatched_at: string; arrived_at: string | null; finished_at: string | null; travel_seconds: number | null;
+    route: { id: string; algorithm: string; distance_meters: number; estimated_time_seconds: number; model_version: string | null } | null;
+  }[]
+}
+
 export interface RouteVariant {
   id: string
   algorithm: RouteAlgorithm
@@ -162,6 +199,7 @@ export interface Dispatch {
   dispatched_at: string
   arrived_at?: string | null
   finished_at?: string | null
+  critical_mode?: boolean
   occurrence_id: string
   vehicle_id: string
   crew_id?: string | null
@@ -169,6 +207,8 @@ export interface Dispatch {
   vehicle?: Pick<Vehicle, "id" | "prefix" | "type" | "status"> | null
   crew?: Crew | null
   routes?: RouteVariant[]
+  used_route_id?: string | null
+  used_route?: RouteVariant | null
 }
 
 /** Both variants as the AI service returns them, before persistence. */
@@ -177,6 +217,10 @@ export interface RoutePreview {
   estimated_time_seconds: number
   node_count: number
   geometry: [number, number][]
+  critical_maneuvers?: {
+    counterflow_segments: number
+    shoulder_segments: number
+  }
 }
 
 /**

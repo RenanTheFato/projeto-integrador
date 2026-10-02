@@ -78,8 +78,8 @@ export default function RedeNeural() {
   return (
     <Page>
       <PageHeader
-        title="Rede neural"
-        subtitle="Estado do modelo que pondera as ruas e histórico de treinamentos"
+        title="IA"
+        subtitle="Estado do modelo de IA que pondera as ruas e histórico de treinamentos"
       />
 
       <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
@@ -157,10 +157,31 @@ export default function RedeNeural() {
 
       <Panel title="Evolução dos treinamentos" icon={<ChartLine className="h-5 w-5" />}>
         {history.loading && !history.data && <LoadingBlock label="Carregando o histórico..." />}
+        {runs.some(run => run.model_path?.startsWith("demo://")) && (
+          <p className="border-l-2 border-warn bg-warn-soft px-4 py-3 text-sm text-ink">
+            O histórico inclui simulações identificadas como “Demonstração”. Essas métricas não
+            representam treinamentos executados e não alteram o modelo carregado.
+          </p>
+        )}
 
         {selectedRun && (
-          <div className="grid gap-8 xl:grid-cols-2 xl:gap-6">
-            <LossCurve run={selectedRun} previous={runs} />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-info bg-surface-muted px-4 py-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Treinamento em análise</p>
+                <p className="mt-1 font-semibold text-ink">{formatDateTime(selectedRun.started_at ?? selectedRun.created_at)}</p>
+                {selectedRun.model_path?.startsWith("demo://") && <p className="text-sm text-warn">Demonstração · métricas simuladas</p>}
+              </div>
+              <Badge tone={TRAINING_STATUS_TONE[selectedRun.status]}>{TRAINING_STATUS_LABEL[selectedRun.status]}</Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-px border border-line bg-line lg:grid-cols-4">
+              <Figure label="Melhor validação" value={formatLoss(selectedRun.best_validation_loss ?? selectedRun.validation_loss)} />
+              <Figure label="Loss de treino" value={formatLoss(selectedRun.train_loss)} />
+              <Figure label="Épocas solicitadas" value={selectedRun.epochs.toLocaleString("pt-BR")} />
+              <Figure label="Meta de validação" value={formatLoss(GOOD_VALIDATION_LOSS)} />
+            </div>
+            <LossCurve key={selectedRun.id} run={selectedRun} previous={runs} />
+            <div className="grid min-w-0 gap-4 xl:grid-cols-2">
 
             <RunComparison
               runs={runs}
@@ -176,14 +197,15 @@ export default function RedeNeural() {
               onSelect={setWatching}
             />
 
+            </div>
             <ConvergenceSpeed runs={runs} threshold={GOOD_VALIDATION_LOSS} />
           </div>
         )}
 
         {selectedRun && (
           <p className="text-sm text-ink-soft">
-            Clique numa coluna, numa bolha ou numa linha do histórico abaixo para ver a curva
-            daquele treinamento.
+            Comparações dos {runs.length} treinamentos desta página. Selecione uma coluna ou bolha
+            para analisar a curva. Pelo teclado, use Tab e Enter.
           </p>
         )}
       </Panel>
@@ -203,6 +225,7 @@ export default function RedeNeural() {
                 <Row key={run.id} onClick={() => setWatching(run.id)}>
                   <Cell>
                     <Badge tone={TRAINING_STATUS_TONE[run.status]}>{TRAINING_STATUS_LABEL[run.status]}</Badge>
+                    {run.model_path?.startsWith("demo://") && <span className="mt-1 block text-sm text-warn">Demonstração</span>}
                     {run.error_message && (
                       <span className="mt-1 block max-w-md truncate text-sm text-alert" title={run.error_message}>
                         {run.error_message}
@@ -241,7 +264,7 @@ export default function RedeNeural() {
 
 function Figure({ label, value }: { label: string, value: string }) {
   return (
-    <div className="rounded-sm border border-line bg-surface px-4 py-3">
+    <div className="min-w-0 bg-surface px-4 py-3">
       <p className="text-sm text-ink-muted">{label}</p>
       <p className="text-2xl font-semibold text-ink">{value}</p>
     </div>
@@ -274,7 +297,8 @@ function LiveRun({ run }: { run: TrainingRun }) {
         </p>
       )}
 
-      {run.status === "CONCLUIDO" && run.best_validation_loss !== null && (
+      {run.model_path?.startsWith("demo://") && <p className="text-sm text-warn">Simulação para apresentação. Nenhum modelo foi treinado ou substituído por este registro.</p>}
+      {!run.model_path?.startsWith("demo://") && run.status === "CONCLUIDO" && run.best_validation_loss !== null && (
         <p className="text-ink">
           {run.best_validation_loss <= GOOD_VALIDATION_LOSS
             ? "Resultado dentro do esperado — o serviço já recarregou este modelo."

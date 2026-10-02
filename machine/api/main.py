@@ -24,6 +24,7 @@ class RouteRequest(BaseModel):
     origin_longitude: float = Field(ge=-180, le=180)
     destination_latitude: float = Field(ge=-90, le=90)
     destination_longitude: float = Field(ge=-180, le=180)
+    critical_mode: bool = False
 
 
 class TrainingRequest(BaseModel):
@@ -84,6 +85,7 @@ def calculate_route(request: RouteRequest) -> dict:
         return engine.calculate(
             (request.origin_latitude, request.origin_longitude),
             (request.destination_latitude, request.destination_longitude),
+            critical_mode=request.critical_mode,
         )
     except ValueError as error:
         # Coordinates outside the graph or with no connecting path: the caller

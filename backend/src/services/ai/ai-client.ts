@@ -5,12 +5,18 @@ export interface RouteVariant {
   distance_meters: number,
   estimated_time_seconds: number,
   node_count: number,
-  geometry: [number, number][]
+  geometry: [number, number][],
+  critical_maneuvers?: {
+    counterflow_segments: number,
+    shoulder_segments: number
+  }
 }
 
 export interface RouteResponse {
   neural: RouteVariant,
+  critical: RouteVariant | null,
   shortest: RouteVariant,
+  critical_mode: boolean,
   model_version: string | null
 }
 
@@ -126,12 +132,17 @@ export class AiClient {
     return payload as T
   }
 
-  async calculateRoute(origin: { latitude: number, longitude: number }, destination: { latitude: number, longitude: number }): Promise<RouteResponse> {
+  async calculateRoute(
+    origin: { latitude: number, longitude: number },
+    destination: { latitude: number, longitude: number },
+    options: { critical_mode?: boolean } = {},
+  ): Promise<RouteResponse> {
     return this.request<RouteResponse>("POST", "/routes", {
       origin_latitude: origin.latitude,
       origin_longitude: origin.longitude,
       destination_latitude: destination.latitude,
-      destination_longitude: destination.longitude
+      destination_longitude: destination.longitude,
+      ...(options.critical_mode ? { critical_mode: true } : {}),
     })
   }
 

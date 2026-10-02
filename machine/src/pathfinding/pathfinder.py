@@ -17,8 +17,21 @@ import networkx as nx
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from neural.path_network import PathNetwork
 
+EXTRA_OPERATIONAL_WAY_TAGS = [
+    "shoulder", "shoulder:both", "shoulder:left", "shoulder:right",
+    "emergency", "motor_vehicle", "vehicle",
+]
+
 def get_city_graph(city_name: str):
     print(f"  Carregando mapa de {city_name}...")
+
+    # OSMnx only preserves a curated set of way tags by default. Critical
+    # routing needs to know whether a mapped road explicitly describes a
+    # shoulder or emergency access, so retain those tags when downloading.
+    for tag in EXTRA_OPERATIONAL_WAY_TAGS:
+        if tag not in ox.settings.useful_tags_way:
+            ox.settings.useful_tags_way.append(tag)
+
     return ox.graph_from_place(city_name, network_type="drive")
 
 def edge_between(graph, u, v, weight: str) -> dict:

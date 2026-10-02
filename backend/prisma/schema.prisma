@@ -139,6 +139,7 @@ enum DispatchStatus {
 /// mantida para comparacao lado a lado no mapa.
 enum RouteAlgorithm {
   NEURAL
+  CRITICAL
   DIJKSTRA
 }
 
@@ -387,12 +388,21 @@ model Dispatch {
   arrived_at    DateTime?
   finished_at   DateTime?
 
-  routes Route[]
+  /// Perfil operacional especial escolhido pelo despacho quando a situação exige.
+  critical_mode Boolean @default(false)
+
+  routes Route[] @relation("DispatchRoutes")
+
+  /// Rota efetivamente adotada no atendimento. Mantém o trajeto histórico
+  /// reproduzível mesmo que o modelo seja atualizado ou a rota seja recalculada.
+  used_route_id String? @unique
+  used_route    Route?  @relation("UsedRoute", fields: [used_route_id], references: [id], onDelete: SetNull)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   @@index([occurrence_id])
+  @@index([occurrence_id, arrived_at])
   @@index([vehicle_id])
   @@index([status])
   @@map("dispatch")
@@ -423,7 +433,9 @@ model Route {
   model_version String?
 
   dispatch_id String?
-  dispatch    Dispatch? @relation(fields: [dispatch_id], references: [id], onDelete: Cascade)
+  dispatch    Dispatch? @relation("DispatchRoutes", fields: [dispatch_id], references: [id], onDelete: Cascade)
+
+  used_by_dispatch Dispatch? @relation("UsedRoute")
 
   created_at DateTime @default(now())
 

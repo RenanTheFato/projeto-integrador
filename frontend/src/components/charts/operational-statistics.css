@@ -1,0 +1,42 @@
+.operational-analysis { display:grid; gap:20px; min-width:0; }
+.operations-intro { display:flex; flex-wrap:wrap; align-items:end; justify-content:space-between; gap:16px; }
+.operations-intro > p { max-width:680px; color:#536575; font-size:13px; line-height:1.6; }
+.operations-intro label { display:grid; gap:6px; min-width:min(270px,100%); font-size:12px; font-weight:600; color:#203d4d; }
+.operations-intro input { padding:10px 12px; border:1px solid #acbdc5; background:#f8faf9; font:inherit; }
+.operations-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border-block:1px solid #cbd6db; background:#f1f5f5; }
+.operations-kpis > div { display:grid; align-content:start; gap:9px; padding:20px; border-right:1px solid #cbd6db; }
+.operations-kpis > div:last-child { border:0; }
+.operations-kpis span,.operations-route-summary > div > span:first-child { font-size:12px; font-weight:600; color:#435d6d; }
+.operations-kpis strong { color:#203d4d; font-size:30px; line-height:1.15; letter-spacing:-.035em; font-variant-numeric:tabular-nums; }
+.operations-kpis small,.operations-route-summary small { font-size:12px; color:#536575; line-height:1.55; }
+.operations-table-wrap { overflow:auto; max-width:100%; border:1px solid #cbd6db; }
+.operations-table { border-collapse:collapse; width:100%; text-align:left; font-size:13px; font-variant-numeric:tabular-nums; }
+.operations-table caption { text-align:left; padding:12px 14px; color:#203d4d; font-weight:600; background:#eaf0f2; }
+.operations-table thead { background:#f1f5f5; color:#435d6d; font-size:11px; }
+.operations-table th,.operations-table td { padding:14px; border-bottom:1px solid #dce4e7; vertical-align:top; }
+.operations-table th { font-weight:600; }
+.operations-table td { min-width:100px; }
+.operations-table tbody th { min-width:180px; }
+.operations-table tbody tr:nth-child(even) { background:#f7f9f8; }
+.operations-table tbody tr[data-selected="true"] { background:#e5eff3; box-shadow:inset 3px 0 #245f73; }
+.operations-table small { display:block; margin-top:5px; color:#536575; font-size:11px; line-height:1.5; font-weight:400; }
+.operations-table button,.operations-table a { color:#175e7b; text-decoration:underline; text-underline-offset:3px; }
+.operations-note { color:#536575; font-size:12px; line-height:1.65; }
+.operations-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.operations-ratio { display:block; height:5px; background:#dbe5e8; margin:6px 0; min-width:60px; }
+.operations-ratio > span { display:block; height:100%; background:#245f73; }
+.operations-route-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border-bottom:1px solid #cbd6db; }
+.operations-route-summary > div { display:grid; align-content:start; gap:8px; padding:8px 18px 20px; border-left:1px solid #dce4e7; }
+.operations-route-summary strong { font-size:28px; color:#203d4d; font-variant-numeric:tabular-nums; }
+.operations-route-summary [data-algorithm="DIJKSTRA"] .operations-ratio > span { background:#a86c20; }
+.operations-route-summary [data-algorithm="CRITICAL"] .operations-ratio > span { background:#af4137; }
+.operations-pagination { display:flex; gap:12px; align-items:center; justify-content:flex-end; flex-wrap:wrap; font-size:12px; color:#435d6d; }
+.operations-pagination > span { margin-right:auto; }
+.operations-pagination button { padding:8px 12px; border:1px solid #acbdc5; }
+.operations-pagination button:disabled { opacity:.45; }
+.operational-analysis :focus-visible { outline:2px solid #175e7b; outline-offset:3px; }
+.operations-empty { padding:24px; color:#536575; }
+.operations-search { display:flex; align-items:end; gap:8px; flex-wrap:wrap; }
+.operations-search button { border:1px solid #acbdc5; padding:10px 14px; color:#175e7b; font-size:12px; min-height:40px; }
+@media(max-width:900px) { .operations-kpis,.operations-route-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } .operations-grid { grid-template-columns:1fr; } }
+@media(max-width:480px) { .operations-kpis > div { padding:14px; } .operations-kpis strong { font-size:24px; } .operations-intro label { width:100%; } }

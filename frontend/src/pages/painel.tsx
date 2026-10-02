@@ -152,7 +152,7 @@ export default function Painel() {
         </Panel>
 
         <div className="flex flex-col gap-5">
-          <Panel title="Rede neural" icon={<Brain className="h-5 w-5" />}>
+          <Panel title="IA" icon={<Brain className="h-5 w-5" />}>
             {model.loading && <LoadingBlock label="Consultando o modelo..." />}
 
             {model.error && (
@@ -176,7 +176,7 @@ export default function Painel() {
             )}
 
             <Link to="/rede-neural" className="font-semibold text-accent hover:underline">
-              Abrir a rede neural
+              Abrir IA
             </Link>
           </Panel>
 

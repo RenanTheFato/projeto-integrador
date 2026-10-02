@@ -31,7 +31,7 @@ const OPERATIONAL: NavItem[] = [
   { to: "/despachos", label: "Despachos" },
   { to: "/rotas", label: "Rotas" },
   { to: "/estatisticas", label: "Estatísticas" },
-  { to: "/rede-neural", label: "Rede Neural" },
+  { to: "/rede-neural", label: "IA" },
 ]
 
 const REGISTRY: NavItem[] = [

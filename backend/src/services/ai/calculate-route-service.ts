@@ -11,11 +11,19 @@ interface CalculateRouteRequest {
   destination_latitude: number,
   destination_longitude: number,
   /// When given, the result is stored and linked to the dispatch.
-  dispatch_id?: string
+  dispatch_id?: string,
+  /// Enables the constrained emergency-operational routing profile.
+  critical_mode?: boolean
 }
 
 export class CalculateRouteService {
-  async execute(data: CalculateRouteRequest): Promise<{ routes: Route[] | null, neural: unknown, shortest: unknown }> {
+  async execute(data: CalculateRouteRequest): Promise<{
+    routes: Route[] | null,
+    neural: unknown,
+    critical: unknown,
+    shortest: unknown,
+    critical_mode: boolean
+  }> {
 
     const origin = await this.resolveOrigin(data)
 
@@ -33,43 +41,74 @@ export class CalculateRouteService {
       if (!dispatch) {
         throw new NotFoundError("Dispatch not found")
       }
+
     }
 
-    const result = await new AiClient().calculateRoute(origin, destination)
+    const result = await new AiClient().calculateRoute(origin, destination, {
+      critical_mode: data.critical_mode ?? false
+    })
 
     // Without a dispatch this is an exploratory query (the "what would the
     // route be" case), so nothing is persisted.
     if (!data.dispatch_id) {
-      return { routes: null, neural: result.neural, shortest: result.shortest }
+      return {
+        routes: null,
+        neural: result.neural,
+        critical: result.critical,
+        shortest: result.shortest,
+        critical_mode: result.critical_mode,
+      }
     }
 
-    const rows = (["NEURAL", "DIJKSTRA"] as const).map((algorithm) => {
-      const variant = algorithm === "NEURAL" ? result.neural : result.shortest
+    const variants = [
+      { algorithm: "NEURAL" as const, variant: result.neural },
+      ...(result.critical
+        ? [{ algorithm: "CRITICAL" as const, variant: result.critical }]
+        : []),
+      { algorithm: "DIJKSTRA" as const, variant: result.shortest },
+    ]
 
-      return {
-        algorithm,
-        dispatch_id: data.dispatch_id!,
-        origin_latitude: new Prisma.Decimal(origin.latitude),
-        origin_longitude: new Prisma.Decimal(origin.longitude),
-        destination_latitude: new Prisma.Decimal(destination.latitude),
-        destination_longitude: new Prisma.Decimal(destination.longitude),
-        distance_meters: variant.distance_meters,
-        estimated_time_seconds: variant.estimated_time_seconds,
-        node_count: variant.node_count,
-        geometry: variant.geometry,
-        model_version: result.model_version
-      }
-    })
+    const rows = variants.map(({ algorithm, variant }) => ({
+      algorithm,
+      dispatch_id: data.dispatch_id!,
+      origin_latitude: new Prisma.Decimal(origin.latitude),
+      origin_longitude: new Prisma.Decimal(origin.longitude),
+      destination_latitude: new Prisma.Decimal(destination.latitude),
+      destination_longitude: new Prisma.Decimal(destination.longitude),
+      distance_meters: variant.distance_meters,
+      estimated_time_seconds: variant.estimated_time_seconds,
+      node_count: variant.node_count,
+      geometry: variant.geometry,
+      model_version: result.model_version
+    }))
 
     await prisma.route.createMany({ data: rows })
 
     const routes = await prisma.route.findMany({
       where: { dispatch_id: data.dispatch_id },
       orderBy: { created_at: "desc" },
-      take: 2
+      take: variants.length
     })
 
-    return { routes, neural: result.neural, shortest: result.shortest }
+    const usedAlgorithm = result.critical_mode ? "CRITICAL" : "NEURAL"
+    const usedRoute = routes.find((route) => route.algorithm === usedAlgorithm)
+    if (usedRoute) {
+      await prisma.dispatch.update({
+        where: { id: data.dispatch_id },
+        data: {
+          used_route_id: usedRoute.id,
+          critical_mode: result.critical_mode,
+        }
+      })
+    }
+
+    return {
+      routes,
+      neural: result.neural,
+      critical: result.critical,
+      shortest: result.shortest,
+      critical_mode: result.critical_mode,
+    }
   }
 
   private async resolveOrigin(data: CalculateRouteRequest) {
