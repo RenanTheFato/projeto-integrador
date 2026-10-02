@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, Brain, ChartLine, History, Play } from "lucide-react"
+import { AlertTriangle, Brain, ChartLine, History, Play, Timer } from "lucide-react"
 
 import { ai } from "@/api/endpoints"
 import { TONE, TRAINING_STATUS_LABEL, TRAINING_STATUS_TONE } from "@/api/labels"
@@ -20,6 +20,7 @@ import { EmptyState, ErrorBox, LoadingBlock } from "@/components/layout/feedback
 import {
   ConvergenceSpeed, EpochsVsQuality, LossCurve, RunComparison,
 } from "@/components/charts/training-charts"
+import { EtaAccuracyChart } from "@/components/charts/eta-accuracy"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatDateTime, formatLoss } from "@/lib/format"
 
@@ -33,6 +34,7 @@ export default function RedeNeural() {
   const [watching, setWatching] = useState<string | null>(null)
 
   const model = useResource(() => ai.model(), [])
+  const eta = useResource(() => ai.etaAccuracy(), [])
   const history = useResource(() => ai.listTrainings({ page, per_page: 10 }), [page])
   const start = useMutation((value: number) => ai.startTraining(value))
 
@@ -208,6 +210,12 @@ export default function RedeNeural() {
             para analisar a curva. Pelo teclado, use Tab e Enter.
           </p>
         )}
+      </Panel>
+
+      <Panel title="Precisão do tempo previsto" icon={<Timer className="h-5 w-5" />}>
+        {eta.loading && !eta.data && <p className="text-sm text-ink-muted">Comparando previsões com chegadas registradas...</p>}
+        {eta.error && <ErrorBox message={eta.error} onRetry={eta.reload} />}
+        {eta.data && <EtaAccuracyChart data={eta.data} />}
       </Panel>
 
       <Panel title="Histórico de treinamentos" icon={<History className="h-5 w-5" />}>

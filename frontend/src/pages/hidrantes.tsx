@@ -12,7 +12,7 @@ import type { FormEvent } from "react"
 import { Droplets, Pencil, Plus } from "lucide-react"
 
 import { ai, units, waterSources } from "@/api/endpoints"
-import { WATER_STATUS_LABEL, WATER_STATUS_TONE, WATER_TYPE_LABEL } from "@/api/labels"
+import { WATER_STATUS_LABEL, WATER_STATUS_TONE, WATER_TYPE_LABEL, optionsOf } from "@/api/labels"
 import type { WaterSource, WaterSourceStatus } from "@/api/types"
 import {
   ActionButton, Badge, Cell, ConfirmButton, Field, Modal, Page, PageHeader, Panel, Row, Select, StatBox, Table,
@@ -26,8 +26,6 @@ import { formatDate, toNumber } from "@/lib/format"
 import { stationsOf } from "@/lib/geo"
 
 
-const options = <K extends string>(labels: Record<K, string>) =>
-  (Object.keys(labels) as K[]).map((value) => ({ value, label: labels[value] }))
 
 /** An inspection older than a year is due again. */
 const OVERDUE_MS = 365 * 86_400_000
@@ -79,7 +77,7 @@ export default function Hidrantes() {
             value={status}
             onChange={setStatus}
             placeholder="Todas as situações"
-            options={options(WATER_STATUS_LABEL)}
+            options={optionsOf(WATER_STATUS_LABEL)}
             aria-label="Filtrar por situação"
           />
         )}
@@ -100,7 +98,7 @@ export default function Hidrantes() {
                   <Cell>{WATER_TYPE_LABEL[source.type]}</Cell>
                   <Cell><Badge tone={WATER_STATUS_TONE[source.status]}>{WATER_STATUS_LABEL[source.status]}</Badge></Cell>
                   <Cell>{source.address}</Cell>
-                  <Cell className="whitespace-nowrap tabular-nums">{source.flow_lpm ? `${source.flow_lpm.toLocaleString("pt-BR")} L/min` : "—"}</Cell>
+                  <Cell className="whitespace-nowrap tabular-nums">{source.flow_lpm !== null ? `${source.flow_lpm.toLocaleString("pt-BR")} L/min` : "—"}</Cell>
                   <Cell className={overdue ? "text-warn" : undefined}>{formatDate(source.last_inspection_at)}</Cell>
                   <Cell>{source.unit?.acronym ?? "—"}</Cell>
                   <Cell>
@@ -153,7 +151,7 @@ function WaterSourceModal({ source, onClose, onSaved }: {
   const [address, setAddress] = useState(source?.address ?? "")
   const [latitude, setLatitude] = useState(source ? String(toNumber(source.latitude)) : "")
   const [longitude, setLongitude] = useState(source ? String(toNumber(source.longitude)) : "")
-  const [flow, setFlow] = useState(source?.flow_lpm ? String(source.flow_lpm) : "")
+  const [flow, setFlow] = useState(source?.flow_lpm != null ? String(source.flow_lpm) : "")
   const [inspection, setInspection] = useState(source?.last_inspection_at ? source.last_inspection_at.slice(0, 10) : "")
   const [notes, setNotes] = useState(source?.notes ?? "")
   const [unitId, setUnitId] = useState(source?.unit_id ?? "")
@@ -165,7 +163,7 @@ function WaterSourceModal({ source, onClose, onSaved }: {
       address: address.trim(),
       latitude: Number(latitude),
       longitude: Number(longitude),
-      flow_lpm: flow ? Number(flow) : null,
+      flow_lpm: flow !== "" ? Number(flow) : null,
       last_inspection_at: inspection ? new Date(`${inspection}T12:00:00`).toISOString() : null,
       notes: notes.trim() || null,
       unit_id: unitId,
@@ -189,10 +187,10 @@ function WaterSourceModal({ source, onClose, onSaved }: {
 
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Tipo" required>
-            <Select value={type} onChange={setType} options={options(WATER_TYPE_LABEL)} />
+            <Select value={type} onChange={setType} options={optionsOf(WATER_TYPE_LABEL)} />
           </Field>
           <Field label="Situação" required>
-            <Select value={status} onChange={setStatus} options={options(WATER_STATUS_LABEL)} />
+            <Select value={status} onChange={setStatus} options={optionsOf(WATER_STATUS_LABEL)} />
           </Field>
           <Field label="Unidade responsável" required>
             <Select

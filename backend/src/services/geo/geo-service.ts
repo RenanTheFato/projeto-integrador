@@ -85,7 +85,9 @@ async function networkBounds(): Promise<GraphBounds | null> {
   }
   try {
     const info = await new AiClient().getModelInfo()
-    boundsCache = { value: info.bounds, expires: Date.now() + 60 * 60_000 }
+    // Null while the AI is still loading the graph: retry soon instead of
+    // searching the whole country for an hour.
+    boundsCache = { value: info.bounds, expires: Date.now() + (info.bounds ? 60 * 60_000 : 30_000) }
   } catch {
     // Without the AI service the search still works, just unbounded.
     boundsCache = { value: null, expires: Date.now() + 60_000 }

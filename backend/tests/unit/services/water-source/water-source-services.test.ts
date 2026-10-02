@@ -27,18 +27,31 @@ const fields = {
 describe("CreateWaterSourceService", () => {
   const service = new CreateWaterSourceService()
 
-  it("numbers a new hydrant after the last one of its series", async () => {
+  it("numbers a new hydrant after the highest number of its series", async () => {
     mockPrisma.unit.findUnique.mockResolvedValueOnce({ id: "u1" })
-    mockPrisma.waterSource.findFirst.mockResolvedValueOnce({ code: "HID-0041" })
+    // Compared as numbers, and hand-typed codes outside the pattern ignored.
+    mockPrisma.waterSource.findMany.mockResolvedValueOnce([
+      { code: "HID-9999" }, { code: "HID-10000" }, { code: "HID-A1" }, { code: "HID-0041" },
+    ])
     mockPrisma.waterSource.findUnique.mockResolvedValueOnce(null)
     mockPrisma.waterSource.create.mockImplementationOnce(async ({ data }) => data)
 
     const created = await service.execute(fields)
 
-    expect(created.code).toBe("HID-0042")
-    expect(mockPrisma.waterSource.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+    expect(created.code).toBe("HID-10001")
+    expect(mockPrisma.waterSource.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { code: { startsWith: "HID-" } }
     }))
+  })
+
+  it("starts a series at 0001", async () => {
+    mockPrisma.unit.findUnique.mockResolvedValueOnce({ id: "u1" })
+    mockPrisma.waterSource.findMany.mockResolvedValueOnce([])
+    mockPrisma.waterSource.findUnique.mockResolvedValueOnce(null)
+    mockPrisma.waterSource.create.mockImplementationOnce(async ({ data }) => data)
+
+    const created = await service.execute({ ...fields, type: "CISTERNA" })
+    expect(created.code).toBe("CIS-0001")
   })
 
   it("rejects a repeated code", async () => {

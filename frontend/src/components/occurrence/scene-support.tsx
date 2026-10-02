@@ -85,7 +85,7 @@ export function SceneSupport({ occurrence }: { occurrence: Occurrence }) {
               <span className="ml-2 text-ink-muted">{source.address}</span>
             </span>
             <span className="flex items-center gap-2">
-              {source.flow_lpm && <span className="text-xs text-ink-muted">{source.flow_lpm.toLocaleString("pt-BR")} L/min</span>}
+              {source.flow_lpm !== null && <span className="text-xs text-ink-muted">{source.flow_lpm.toLocaleString("pt-BR")} L/min</span>}
               <Badge tone={WATER_STATUS_TONE[source.status]}>{WATER_STATUS_LABEL[source.status]}</Badge>
               <span className="w-14 text-right font-semibold tabular-nums text-ink">{formatDistance(source.distance_meters ?? null)}</span>
             </span>

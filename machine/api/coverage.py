@@ -66,10 +66,24 @@ def _reached_lines(graph, times: dict, weight: str, limit: float, projection: Lo
     return lines
 
 
-def isochrones(graph, sources: list, weight: str, minutes: list[int], projection: LocalProjection) -> list[dict]:
-    """One GeoJSON (multi)polygon per threshold, smallest first."""
+def isochrones(
+    graph,
+    sources: list,
+    weight: str,
+    minutes: list[int],
+    projection: LocalProjection,
+    times: dict | None = None,
+) -> list[dict]:
+    """
+    One GeoJSON (multi)polygon per threshold, smallest first.
+
+    `times` may come from a search the caller already ran with a cutoff at
+    least as large as the biggest threshold; every comparison below is against
+    the threshold, so a longer search changes nothing in the polygons.
+    """
     thresholds = sorted(set(minutes))
-    times = reach(graph, sources, weight, thresholds[-1] * 60.0)
+    if times is None:
+        times = reach(graph, sources, weight, thresholds[-1] * 60.0)
 
     result = []
     for threshold in thresholds:

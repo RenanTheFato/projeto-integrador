@@ -1,27 +1,33 @@
+import { lazy, Suspense } from "react"
 import { Navigate, Outlet, Route, Routes } from "react-router-dom"
 
 import "./App.css"
 
 import Navbar from "@/components/layout/navbar"
+import { FullPageSpinner } from "@/components/layout/feedback"
 import { CommandPalette } from "@/components/layout/command-palette"
 import { CriticalAlerts } from "@/components/layout/critical-alert"
 
 import Painel from "@/pages/painel"
-import Ocorrencias from "@/pages/ocorrencias"
-import OcorrenciaDetalhe from "@/pages/ocorrencia-detalhe"
-import Despachos from "@/pages/despachos"
-import Rotas from "@/pages/rotas"
-import Estatisticas from "@/pages/estatisticas"
-import RedeNeural from "@/pages/rede-neural"
-import Efetivo from "@/pages/efetivo"
-import Viaturas from "@/pages/viaturas"
-import Guarnicoes from "@/pages/guarnicoes"
-import Turnos from "@/pages/turnos"
-import Unidades from "@/pages/unidades"
-import Cobertura from "@/pages/cobertura"
-import Hidrantes from "@/pages/hidrantes"
-import Terminal from "@/pages/terminal"
-import Telao from "@/pages/telao"
+
+// The panel is the first screen and loads with the shell; every other screen
+// is fetched on first visit, so opening the console does not wait for the
+// map engine, the charts and the 3D vehicles all at once.
+const Ocorrencias = lazy(() => import("@/pages/ocorrencias"))
+const OcorrenciaDetalhe = lazy(() => import("@/pages/ocorrencia-detalhe"))
+const Despachos = lazy(() => import("@/pages/despachos"))
+const Rotas = lazy(() => import("@/pages/rotas"))
+const Estatisticas = lazy(() => import("@/pages/estatisticas"))
+const RedeNeural = lazy(() => import("@/pages/rede-neural"))
+const Efetivo = lazy(() => import("@/pages/efetivo"))
+const Viaturas = lazy(() => import("@/pages/viaturas"))
+const Guarnicoes = lazy(() => import("@/pages/guarnicoes"))
+const Turnos = lazy(() => import("@/pages/turnos"))
+const Unidades = lazy(() => import("@/pages/unidades"))
+const Cobertura = lazy(() => import("@/pages/cobertura"))
+const Hidrantes = lazy(() => import("@/pages/hidrantes"))
+const Terminal = lazy(() => import("@/pages/terminal"))
+const Telao = lazy(() => import("@/pages/telao"))
 
 /**
  * There is no login.
@@ -38,7 +44,9 @@ function Shell() {
       <CriticalAlerts />
       <CommandPalette />
       <main className="flex-1">
-        <Outlet />
+        <Suspense fallback={<FullPageSpinner />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   )
@@ -67,9 +75,9 @@ export default function App() {
 
       {/* Screens for other devices: the tablet in the cab and the TV on the
           wall. They carry their own chrome, sized for gloves and distance. */}
-      <Route path="/terminal" element={<Terminal />} />
-      <Route path="/terminal/:vehicleId" element={<Terminal />} />
-      <Route path="/telao" element={<Telao />} />
+      <Route path="/terminal" element={<Suspense fallback={<FullPageSpinner />}><Terminal /></Suspense>} />
+      <Route path="/terminal/:vehicleId" element={<Suspense fallback={<FullPageSpinner />}><Terminal /></Suspense>} />
+      <Route path="/telao" element={<Suspense fallback={<FullPageSpinner />}><Telao /></Suspense>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

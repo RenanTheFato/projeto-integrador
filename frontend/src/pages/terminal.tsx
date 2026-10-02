@@ -129,6 +129,9 @@ function VehicleTerminal({ vehicleId }: { vehicleId: string }) {
     if (event.type === "dispatch.created" && event.payload.vehicle_id === vehicleId) reloadAll()
     if (event.type === "dispatch.updated" && event.payload.id === current?.id) reloadAll()
     if (event.type === "occurrence.updated" && event.payload.id === current?.occurrence_id) occurrence.reload()
+    // The route is saved after the dispatch is announced; the timeline ping
+    // (ROTA) is the signal that it now exists.
+    if (event.type === "occurrence.timeline" && event.payload.occurrence_id === current?.occurrence_id) occurrence.reload()
   })
 
   const advance = useMutation((status: DispatchStatus) => dispatches.updateStatus(current!.id, status))

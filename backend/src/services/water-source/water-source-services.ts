@@ -54,16 +54,22 @@ export class CreateWaterSourceService {
     })
   }
 
-  /// `HID-0007`: the type's prefix and the next number in that series.
+  /// `HID-0007`: the type's prefix and one more than the highest number in
+  /// that series. Codes typed by hand that are not `PREFIX-number` are
+  /// ignored, and numbers are compared as numbers, so HID-10000 follows
+  /// HID-9999. Two simultaneous creates can still pick the same number; the
+  /// unique index rejects the second with a 409 the operator can retry.
   private async nextCode(type: WaterSourceType): Promise<string> {
     const prefix = CODE_PREFIX[type]
-    const last = await prisma.waterSource.findFirst({
+    const existing = await prisma.waterSource.findMany({
       where: { code: { startsWith: `${prefix}-` } },
-      orderBy: { code: "desc" },
       select: { code: true }
     })
-    const next = last ? Number(last.code.split("-")[1] ?? 0) + 1 : 1
-    return `${prefix}-${String(next).padStart(4, "0")}`
+    const highest = existing.reduce((max, { code }) => {
+      const suffix = code.slice(prefix.length + 1)
+      return /^\d+$/.test(suffix) ? Math.max(max, Number(suffix)) : max
+    }, 0)
+    return `${prefix}-${String(highest + 1).padStart(4, "0")}`
   }
 }
 

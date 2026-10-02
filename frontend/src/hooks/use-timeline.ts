@@ -11,11 +11,8 @@ export function useTimeline(occurrenceId: string) {
   const reload = timeline.reload
 
   useRealtime(useCallback((event) => {
-    const touches =
-      (event.type === "occurrence.timeline" && event.payload.occurrence_id === occurrenceId)
-      || (event.type === "dispatch.updated" && event.payload.occurrence_id === occurrenceId)
-      || (event.type === "occurrence.updated" && event.payload.id === occurrenceId)
-    if (touches) reload()
+    // Every logged change publishes this ping, so it is the only one needed.
+    if (event.type === "occurrence.timeline" && event.payload.occurrence_id === occurrenceId) reload()
   }, [occurrenceId, reload]))
 
   return timeline

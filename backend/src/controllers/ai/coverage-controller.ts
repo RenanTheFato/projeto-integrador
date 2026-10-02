@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod/v4";
 import { handleError } from "../../errors/handle-error.js";
 import { CoverageService } from "../../services/ai/coverage-service.js";
+import { EtaAccuracyService } from "../../services/ai/eta-accuracy-service.js";
 
 export class CoverageController {
   async handle(req: FastifyRequest, rep: FastifyReply) {
@@ -24,6 +25,23 @@ export class CoverageController {
       return rep.status(200).send(result)
     } catch (error: unknown) {
       return handleError(error, rep, "Coverage")
+    }
+  }
+}
+
+export class EtaAccuracyController {
+  async handle(req: FastifyRequest, rep: FastifyReply) {
+
+    const querySchema = z.object({
+      limit: z.coerce.number().int().min(10).max(5000).default(1000)
+    })
+
+    try {
+      const { limit } = querySchema.parse(req.query)
+      const result = await new EtaAccuracyService().execute({ limit })
+      return rep.status(200).send(result)
+    } catch (error: unknown) {
+      return handleError(error, rep, "ETA accuracy")
     }
   }
 }

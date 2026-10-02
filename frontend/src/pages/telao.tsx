@@ -52,7 +52,12 @@ export default function Telao() {
   const active = useResource(() => dispatches.list({ open: true, per_page: 100 }), [])
   const unitList = useResource(() => units.list({ active: true }), [])
 
-  const reload = useCallback(() => { open.reload(); fleet.reload(); active.reload() }, [open, fleet, active])
+  // The `.reload` functions are stable; the resource objects are not, and
+  // depending on them would restart the 30 s interval on every clock tick.
+  const reloadOpen = open.reload
+  const reloadFleet = fleet.reload
+  const reloadActive = active.reload
+  const reload = useCallback(() => { reloadOpen(); reloadFleet(); reloadActive() }, [reloadOpen, reloadFleet, reloadActive])
 
   const { connected } = useRealtime(useCallback((event) => {
     if (event.type !== "connected" && event.type !== "occurrence.timeline") reload()

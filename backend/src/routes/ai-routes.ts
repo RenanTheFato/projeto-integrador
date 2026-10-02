@@ -1,7 +1,7 @@
 import { FastifyPluginOptions, FastifyReply, FastifyRequest } from "fastify";
 import { FastifyTypedInstance } from "../@types/fastify-types.js";
 import { CalculateRouteController } from "../controllers/ai/calculate-route-controller.js";
-import { CoverageController } from "../controllers/ai/coverage-controller.js";
+import { CoverageController, EtaAccuracyController } from "../controllers/ai/coverage-controller.js";
 import { GetTrainingController, ListTrainingsController, ModelInfoController, StartTrainingController } from "../controllers/ai/training-controller.js";
 
 export async function aiRoutes(fastify: FastifyTypedInstance, plugins: FastifyPluginOptions) {
@@ -13,6 +13,11 @@ export async function aiRoutes(fastify: FastifyTypedInstance, plugins: FastifyPl
   // Isochrones of the stations and how much of the recent demand they reach.
   fastify.post("/coverage", async (req: FastifyRequest, rep: FastifyReply) => {
     return new CoverageController().handle(req, rep)
+  })
+
+  // Predicted travel time against the arrival each crew reported.
+  fastify.get("/eta-accuracy", async (req: FastifyRequest, rep: FastifyReply) => {
+    return new EtaAccuracyController().handle(req, rep)
   })
 
   fastify.get("/model", async (req: FastifyRequest, rep: FastifyReply) => {

@@ -461,3 +461,29 @@ export interface Coverage {
   isochrones: CoverageArea[]
   demand: { sample_size: number, covered: Record<string, number>, points: CoveragePoint[] } | null
 }
+
+export interface EtaSummary {
+  count: number
+  mae_seconds: number
+  /** Mean of actual minus predicted: positive means crews take longer. */
+  bias_seconds: number
+  mape: number
+  p90_abs_error_seconds: number
+  within_60s: number
+}
+
+export interface EtaAccuracy {
+  summary: EtaSummary | null
+  live_summary: EtaSummary | null
+  demo_share: number
+  samples: {
+    dispatch_id: string
+    occurrence_id: string
+    protocol: string
+    algorithm: string
+    predicted_seconds: number
+    actual_seconds: number
+    dispatched_at: string
+    demo: boolean
+  }[]
+}

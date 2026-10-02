@@ -510,9 +510,16 @@ class RouteEngine:
             thresholds = sorted(set(minutes))
             key = (tuple(sources), tuple(thresholds), critical_mode)
 
+            # One search serves both the polygons and the demand points. With
+            # points it runs to three times the largest threshold, so the
+            # client can also say how late an uncovered call is reached.
+            cutoff = max(thresholds) * 60.0 * (3 if points is not None else 1)
+            times = None
+
             areas = self._isochrone_cache.get(key)
             if areas is None:
-                areas = coverage.isochrones(graph, sources, weight, thresholds, self._projection)
+                times = coverage.reach(graph, sources, weight, cutoff)
+                areas = coverage.isochrones(graph, sources, weight, thresholds, self._projection, times)
                 self._isochrone_cache[key] = areas
                 if len(self._isochrone_cache) > 64:
                     self._isochrone_cache.popitem(last=False)
@@ -527,10 +534,8 @@ class RouteEngine:
             }
 
             if points is not None:
-                # Searching well past the largest threshold lets the client
-                # show how late an uncovered point would be reached, not just
-                # that it is outside.
-                times = coverage.reach(graph, sources, weight, max(thresholds) * 60.0 * 3)
+                if times is None:
+                    times = coverage.reach(graph, sources, weight, cutoff)
                 reached = coverage.point_times(times, self._snap_many(points))
                 result["points"] = {
                     "total": len(points),
@@ -569,7 +574,10 @@ class RouteEngine:
             anchor_node = self._snap(anchor, "anchor")
             search = graph.reverse(copy=False) if direction == "to_anchor" else graph
 
-            times, paths = nx.single_source_dijkstra(search, anchor_node, weight=weight)
+            # Predecessors, not full paths: building the path to every node of
+            # the city just to read a handful of them cost far more than the
+            # search itself, all of it under the engine lock.
+            predecessors, times = nx.dijkstra_predecessor_and_distance(search, anchor_node, weight=weight)
             output = []
 
             for node, snap_distance in self._snap_many(points):
@@ -583,10 +591,12 @@ class RouteEngine:
                     continue
 
                 distance = 0.0
-                path = paths[node]
-                for u, v in zip(path, path[1:]):
-                    cheapest = min(search[u][v].values(), key=lambda data: data.get(weight, float("inf")))
+                current = node
+                while current != anchor_node:
+                    previous = predecessors[current][0]
+                    cheapest = min(search[previous][current].values(), key=lambda data: data.get(weight, float("inf")))
                     distance += float(cheapest.get("length", 0.0))
+                    current = previous
 
                 output.append({
                     "reachable": True,

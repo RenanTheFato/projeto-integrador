@@ -1,6 +1,8 @@
 import { prisma } from "../../config/prisma.js";
 import { AiClient, GeoPoint } from "./ai-client.js";
 
+const MAX_ORIGINS = 50
+
 interface CoverageRequest {
   minutes: number[],
   critical_mode?: boolean,
@@ -41,8 +43,11 @@ export class CoverageService {
       })
       : []
 
+    // The AI takes at most 50 origins. Hypothetical posts are what the user is
+    // asking about, so they are kept and the real ones fill the rest.
+    const realSlots = MAX_ORIGINS - extra_stations.length
     const stations = [
-      ...units.map((unit) => ({
+      ...units.slice(0, realSlots).map((unit) => ({
         id: unit.id,
         acronym: unit.acronym,
         name: unit.name,

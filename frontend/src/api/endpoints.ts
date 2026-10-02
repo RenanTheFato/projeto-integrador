@@ -8,7 +8,7 @@
 
 import { api, query } from "./client"
 import type {
-  Closure, Coverage, Crew, CrewRole, Dispatch, DispatchStatus, Firefighter, FirefighterStatus, HospitalOption, ModelInfo,
+  Closure, Coverage, Crew, EtaAccuracy, CrewRole, Dispatch, DispatchStatus, Firefighter, FirefighterStatus, HospitalOption, ModelInfo,
   Occurrence, OccurrenceNature, OccurrencePriority, OccurrenceStatisticsRow, OccurrenceStatus, Paginated, Place, Rank,
   RoutePreview, RouteVariant, Shift, ShiftType, TimelineEntry, TrainingRun, Unit, UnitType,
   Vehicle, VehicleRecommendation, VehicleStatus, VehicleType, OperationalStatistics, WaterSource, WaterSourceStatus,
@@ -362,6 +362,8 @@ export const ai = {
     critical_mode: boolean,
     closures: { count: number, blocked_edges: number },
   }>("/ai/routes", input),
+
+  etaAccuracy: (limit = 1000) => api.get<EtaAccuracy>(`/ai/eta-accuracy${query({ limit })}`),
 
   /** Isochrones of the stations and how much recent demand they reach. */
   coverage: (input: {
