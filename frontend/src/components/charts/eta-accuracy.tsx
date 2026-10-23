@@ -65,7 +65,7 @@ export function EtaAccuracyChart({ data }: { data: EtaAccuracy }) {
         <Tile label="Erro relativo" value={`${(summary.mape * 100).toFixed(1).replace(".", ",")}%`} hint={`p90 ${formatDuration(summary.p90_abs_error_seconds)}`} />
       </div>
 
-      <div className="relative w-full max-w-[680px]">
+      <div className="chart-plot relative w-full max-w-[680px]">
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-auto w-full" role="img"
           aria-label={`Dispersão de ${summary.count} chegadas: tempo previsto pela IA contra o tempo real. Erro médio ${formatDuration(summary.mae_seconds)}.`}
           onMouseLeave={() => setHover(null)}>
@@ -90,7 +90,7 @@ export function EtaAccuracyChart({ data }: { data: EtaAccuracy }) {
               cx={x(sample.predicted_seconds)}
               cy={y(sample.actual_seconds)}
               r={hover === index ? 6 : 4}
-              fill="#0B63A5"
+              fill="var(--color-accent)"
               fillOpacity={hover === null || hover === index ? 0.55 : 0.2}
               stroke="var(--color-surface)"
               strokeWidth={hover === index ? 2 : 1}

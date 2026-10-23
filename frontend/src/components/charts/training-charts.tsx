@@ -28,22 +28,25 @@
  * it and the chart stops being crisp at either end of the range.
  */
 
-import { useMemo, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { curvePath } from "./curve"
 import "./charts.css"
 
 import type { TrainingPoint, TrainingRun } from "@/api/types"
 import { formatLoss } from "@/lib/format"
 import { useMeasure } from "@/hooks/use-measure"
+import { useVisualMotion } from "@/hooks/use-visual-motion"
+import { learningRates } from "@/components/mapa/coverage-ai-policy"
+import "@/components/mapa/coverage-ai.css"
 
-const TRAIN_COLOR = "#536B7B"
-const VALIDATION_COLOR = "#176B80"
-const CONTEXT_COLOR = "#CBD5E1"
-const GRID_COLOR = "#D7E0E3"
-const AXIS_INK = "#536575"
-const INK = "#0F1922"
-const SURFACE = "#F4F6F5"
-const GOAL_COLOR = "#55636F"
+const TRAIN_COLOR = "var(--color-warn)"
+const VALIDATION_COLOR = "var(--color-accent)"
+const CONTEXT_COLOR = "var(--color-ink-soft)"
+const GRID_COLOR = "var(--color-line)"
+const AXIS_INK = "var(--color-ink-muted)"
+const INK = "var(--color-ink)"
+const SURFACE = "var(--color-canvas)"
+const GOAL_COLOR = "var(--color-ok)"
 
 const CURVE_HEIGHT = 340
 const BARS_HEIGHT = 250
@@ -100,7 +103,7 @@ function Legend({ items }: {
           {item.swatch ? (
             <span
               className="h-3 w-4 shrink-0 border border-line"
-              style={{ background: item.color, opacity: 0.35 }}
+              style={{ background: item.color }}
             />
           ) : (
             // A line key, not a filled box: these are lines.
@@ -161,9 +164,32 @@ function TooltipRow({ color, label, value }: { color: string, label: string, val
 
 // -- the loss curve ----------------------------------------------------------
 
+function LearningRateSteps({ points, maxEpoch }: { points: TrainingPoint[]; maxEpoch: number }) {
+  const rates = learningRates(points)
+  if (!rates.length) return <p className="training-lr">Taxa de aprendizagem (LR) não registrada neste treinamento.</p>
+  const max = Math.max(...rates.map(point => point.rate))
+  const x = (epoch: number) => 12 + epoch / maxEpoch * 476
+  const y = (rate: number) => 60 - rate / max * 42
+  const path = rates.map((point, index) => index ? `H${x(point.epoch)}V${y(point.rate)}` : `M${x(point.epoch)},${y(point.rate)}`).join(" ")
+  const latest = rates[rates.length - 1]
+  const reductions = rates.filter((point, index) => index > 0 && point.rate < rates[index - 1].rate)
+  return <div className="training-lr">
+    <p>LR reportada: <strong className="text-ink">{latest.rate.toExponential(2)}</strong> ? ?poca {latest.epoch}</p>
+    <svg viewBox="0 0 500 78" role="img" aria-label={`Taxa de aprendizagem em degraus. ${reductions.length} reduções observadas.`}>
+      <path d={path} fill="none" stroke="var(--color-accent)" strokeWidth={2} />
+      {rates.map(point => <circle key={point.epoch} cx={x(point.epoch)} cy={y(point.rate)} r={2.5} fill="var(--color-accent)"><title>?poca {point.epoch}: LR {point.rate.toExponential(2)}</title></circle>)}
+      <text x={12} y={75} fill="var(--color-ink-muted)" fontSize={11}>?pocas registradas</text>
+    </svg>
+    <p>{reductions.length ? reductions.map(point => `Época ${point.epoch}: ${point.rate.toExponential(2)}`).join(" · ") : "Nenhuma redução de LR entre as medições recebidas."} Os degraus marcam registros recebidos, não o instante exato da redução.</p>
+  </div>
+}
+
 export function LossCurve({ run, previous }: { run: TrainingRun, previous: TrainingRun[] }) {
   const [ref, width] = useMeasure()
   const [hover, setHover] = useState<number | null>(null)
+  const motion = useVisualMotion()
+  const clipId = useId()
+  const running = run.status === "EXECUTANDO" || run.status === "PENDENTE"
 
   const points = useMemo(() => historyOf(run), [run])
 
@@ -318,7 +344,7 @@ export function LossCurve({ run, previous }: { run: TrainingRun, previous: Train
                 <rect
                   x={x(last.epoch)} y={PADDING.top}
                   width={Math.max(0, x(maxEpoch) - x(last.epoch))} height={plotHeight}
-                  fill="#F3F6F9" opacity={0.85}
+                  fill="var(--color-surface-muted)" opacity={0.85}
                 />
                 <line
                   x1={x(last.epoch)} y1={PADDING.top}
@@ -338,6 +364,9 @@ export function LossCurve({ run, previous }: { run: TrainingRun, previous: Train
               />
             ))}
 
+            <defs><clipPath id={clipId}><rect x={PADDING.left - 6} y={0} width={plotWidth + 12} height={CURVE_HEIGHT}
+              className="training-reveal" style={{ transform: `scaleX(${Math.min(1, (last.epoch / maxEpoch) + .02)})`, transformOrigin: `${PADDING.left - 6}px 0px`, transition: motion.animate && running ? undefined : "none" }} /></clipPath></defs>
+            <g clipPath={`url(#${clipId})`}>
             {gapPath && <path d={gapPath} fill={TRAIN_COLOR} opacity={0.07} />}
 
             <path
@@ -355,6 +384,9 @@ export function LossCurve({ run, previous }: { run: TrainingRun, previous: Train
               <circle key={point.epoch} cx={x(point.epoch)} cy={y(point.validation_loss!)} r={points.length > 60 ? 1.5 : 3}
                 fill={SURFACE} stroke={VALIDATION_COLOR} strokeWidth={1.5} />
             ))}
+
+            {running && last.validation_loss !== null && <circle cx={x(last.epoch)} cy={y(last.validation_loss)} r={6} fill="none" stroke={VALIDATION_COLOR} strokeWidth={2} className={motion.animate ? "training-current-pulse" : undefined} />}
+            </g>
 
             {/* The epoch whose checkpoint was kept, labelled directly: it is
                 the one point on the chart the run is judged by. */}
@@ -452,9 +484,11 @@ export function LossCurve({ run, previous }: { run: TrainingRun, previous: Train
         )}
       </div>
 
+      <LearningRateSteps points={points} maxEpoch={maxEpoch} />
+
       {stoppedEarly && (
         <p className="text-sm text-ink-soft">
-          A corrida parou na época {last.epoch} das {run.epochs} pedidas — a área clara à direita
+          A corrida parou na época {last.epoch} das {run.epochs} pedidas — a área marcada à direita
           é o que o <em>early stopping</em> dispensou quando a loss de validação deixou de
           melhorar.
         </p>
@@ -470,7 +504,8 @@ export function LossCurve({ run, previous }: { run: TrainingRun, previous: Train
                 <th className="py-1 pr-3 font-semibold">Época</th>
                 <th className="py-1 pr-3 font-semibold">Treino</th>
                 <th className="py-1 pr-3 font-semibold">Validação</th>
-                <th className="py-1 font-semibold">Melhor</th>
+                <th className="py-1 pr-3 font-semibold">Melhor</th>
+                <th className="py-1 font-semibold">LR</th>
               </tr>
             </thead>
             <tbody style={{ fontVariantNumeric: "tabular-nums" }}>
@@ -479,7 +514,8 @@ export function LossCurve({ run, previous }: { run: TrainingRun, previous: Train
                   <td className="py-1 pr-3">{point.epoch}</td>
                   <td className="py-1 pr-3">{formatLoss(point.train_loss)}</td>
                   <td className="py-1 pr-3">{formatLoss(point.validation_loss)}</td>
-                  <td className="py-1">{formatLoss(point.best_validation_loss)}</td>
+                  <td className="py-1 pr-3">{formatLoss(point.best_validation_loss)}</td>
+                  <td className="py-1">{point.learning_rate?.toExponential(2) ?? "?"}</td>
                 </tr>
               ))}
             </tbody>

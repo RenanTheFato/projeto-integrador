@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CornerDownLeft, FileText, Plus, Search } from "lucide-react"
 import { useNavigate } from "react-router-dom"
+import { Dialog } from "radix-ui"
 
 import { occurrences } from "@/api/endpoints"
 import { NATURE_LABEL } from "@/api/labels"
@@ -36,6 +37,7 @@ const COMMANDS: NavCommand[] = [
   { id: "telao", label: "Telão do COBOM", keywords: ["wallboard", "tv", "painel grande"], group: "Telas", to: "/telao" },
   { id: "efetivo", label: "Efetivo", keywords: ["bombeiros", "militares"], group: "Cadastros", to: "/efetivo" },
   { id: "viaturas", label: "Viaturas", keywords: ["frota"], group: "Cadastros", to: "/viaturas" },
+  { id: "garagem", label: "Garagem 3D", keywords: ["veiculos", "modelos", "aparencia", "frota"], group: "Cadastros", to: "/garagem" },
   { id: "guarnicoes", label: "Guarnições", keywords: ["equipes"], group: "Cadastros", to: "/guarnicoes" },
   { id: "turnos", label: "Turnos", keywords: ["escala", "plantao"], group: "Cadastros", to: "/turnos" },
   { id: "unidades", label: "Unidades", keywords: ["quarteis", "postos"], group: "Cadastros", to: "/unidades" },
@@ -53,8 +55,9 @@ export function CommandPalette() {
   const [active, setActive] = useState(0)
   // Results remember the text they answer, so a stale answer never shows
   // under a newer query and nothing has to be cleared from an effect.
-  const [found, setFound] = useState<{ query: string, items: Occurrence[] }>({ query: "", items: [] })
+  const [found, setFound] = useState<{ query: string, items: Occurrence[], error?: boolean }>({ query: "", items: [] })
   const inputRef = useRef<HTMLInputElement>(null)
+  const openerRef = useRef<HTMLElement | null>(null)
 
   const close = useCallback(() => {
     setOpen(false)
@@ -64,35 +67,49 @@ export function CommandPalette() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const dialog = document.querySelector('[role="dialog"]')
+      if (dialog && dialog.getAttribute("aria-label") !== "Paleta de comandos") return
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault()
-        setOpen((value) => !value)
+        if (!dialog) openerRef.current = document.activeElement as HTMLElement | null
+        if (dialog) close()
+        else setOpen(true)
       } else if (event.altKey && event.key.toLowerCase() === "n") {
         event.preventDefault()
+        close()
         navigate("/ocorrencias?nova=1")
       }
     }
-    const onOpen = () => setOpen(true)
+    const onOpen = () => {
+      if (document.querySelector('[role="dialog"]')) return
+      openerRef.current = document.activeElement as HTMLElement | null
+      setOpen(true)
+    }
     window.addEventListener("keydown", onKey)
     window.addEventListener(OPEN_PALETTE_EVENT, onOpen)
     return () => {
       window.removeEventListener("keydown", onKey)
       window.removeEventListener(OPEN_PALETTE_EVENT, onOpen)
     }
-  }, [navigate])
+  }, [navigate, close])
 
   // Anything of three characters or more is also looked up as an occurrence:
   // a protocol, a street, a word of the report.
   useEffect(() => {
     const text = query.trim()
     if (!open || (text.length < 3 && !looksLikeProtocol(text))) return
+    let current = true
     const timer = window.setTimeout(() => {
       occurrences.list({ search: text, per_page: 6 })
-        .then((page) => setFound({ query: text, items: page.items }))
-        .catch(() => setFound({ query: text, items: [] }))
+        .then((page) => { if (current) setFound({ query: text, items: page.items }) })
+        .catch(() => { if (current) setFound({ query: text, items: [], error: true }) })
     }, 220)
-    return () => window.clearTimeout(timer)
+    return () => { current = false; window.clearTimeout(timer) }
   }, [query, open])
+
+  useEffect(() => {
+    if (open) document.getElementById(`palette-option-${active}`)?.scrollIntoView({ block: "nearest" })
+  }, [active, open])
 
   const entries: Entry[] = useMemo(() => {
     const commands = rankCommands(COMMANDS, query).slice(0, 8).map((command) => ({ kind: "command" as const, command }))
@@ -111,14 +128,17 @@ export function CommandPalette() {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[60] bg-chrome/60 backdrop-blur-[2px]" onMouseDown={close}>
-      <div
-        role="dialog"
-        aria-modal="true"
+    <Dialog.Root open onOpenChange={(value) => { if (!value) close() }}>
+      <Dialog.Portal>
+      <Dialog.Overlay className="zeno-backdrop fixed inset-0 z-[60] bg-chrome/70" />
+      <Dialog.Content
         aria-label="Paleta de comandos"
-        onMouseDown={(event) => event.stopPropagation()}
-        className="mx-auto mt-[12vh] flex w-[calc(100%-2rem)] max-w-xl flex-col overflow-hidden rounded-sm border border-line bg-surface shadow-2xl"
+        aria-describedby={undefined}
+        onOpenAutoFocus={(event) => { event.preventDefault(); inputRef.current?.focus() }}
+        onCloseAutoFocus={(event) => { event.preventDefault(); if (openerRef.current?.isConnected) openerRef.current.focus({ preventScroll: true }) }}
+        className="zeno-dialog fixed left-1/2 top-[12vh] z-[60] -translate-x-1/2 flex w-[calc(100%-2rem)] max-w-xl flex-col overflow-hidden rounded-sm border border-line bg-surface shadow-2xl"
       >
+        <Dialog.Title className="sr-only">Paleta de comandos</Dialog.Title>
         <div className="flex items-center gap-2 border-b border-line px-3">
           <Search className="h-4 w-4 text-ink-soft" />
           <input
@@ -130,7 +150,7 @@ export function CommandPalette() {
             onChange={(event) => { setQuery(event.target.value); setActive(0) }}
             onKeyDown={(event) => {
               if (event.key === "Escape") { event.preventDefault(); close() }
-              if (event.key === "ArrowDown") { event.preventDefault(); setActive((index) => Math.min(index + 1, entries.length - 1)) }
+              if (event.key === "ArrowDown") { event.preventDefault(); setActive((index) => Math.max(0, Math.min(index + 1, entries.length - 1))) }
               if (event.key === "ArrowUp") { event.preventDefault(); setActive((index) => Math.max(index - 1, 0)) }
               if (event.key === "Enter") { event.preventDefault(); run(entries[active]) }
             }}
@@ -139,17 +159,21 @@ export function CommandPalette() {
             role="combobox"
             aria-expanded="true"
             aria-controls="palette-results"
-            className="h-12 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-soft"
+            aria-activedescendant={entries[active] ? `palette-option-${active}` : undefined}
+            className="h-12 min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-soft"
           />
           <kbd className="label-caps rounded-sm border border-line px-1.5 py-0.5 text-ink-soft">Esc</kbd>
         </div>
 
         <ul id="palette-results" role="listbox" className="max-h-[50vh] overflow-y-auto py-1">
-          {entries.length === 0 && <li className="px-4 py-6 text-center text-sm text-ink-muted">Nada encontrado.</li>}
+          {entries.length === 0 && <li role="presentation" className="px-4 py-6 text-center text-sm text-ink-muted">
+            {query.trim().length >= 3 && found.query !== query.trim() ? "Buscando ocorrências…" : found.query === query.trim() && found.error ? "Busca de ocorrências indisponível. Tente novamente." : "Nada encontrado."}
+          </li>}
           {entries.map((entry, index) => (
             <li
               key={entry.kind === "command" ? entry.command.id : entry.occurrence.id}
               role="option"
+              id={`palette-option-${index}`}
               aria-selected={index === active}
               onMouseEnter={() => setActive(index)}
               onClick={() => run(entry)}
@@ -175,10 +199,13 @@ export function CommandPalette() {
           ))}
         </ul>
 
+        {entries.length > 0 && found.query === query.trim() && found.error && <p role="status" className="px-4 py-2 text-xs text-warn">Busca de ocorrências indisponível. Os atalhos de navegação continuam disponíveis.</p>}
+
         <p className="border-t border-line bg-surface-muted px-4 py-2 text-xs text-ink-muted">
           ↑↓ para escolher · Enter para abrir · <strong>Ctrl+K</strong> abre e fecha · <strong>Alt+N</strong> nova ocorrência
         </p>
-      </div>
-    </div>
+      </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }

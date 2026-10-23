@@ -13,18 +13,21 @@ import { Link, useNavigate } from "react-router-dom"
 
 import { dispatches, occurrences, units, vehicles } from "@/api/endpoints"
 import {
-  DISPATCH_STATUS_LABEL, NATURE_LABEL, OCCURRENCE_STATUS_LABEL, PRIORITY_LABEL, PRIORITY_TONE,
+  DISPATCH_STATUS_LABEL, NATURE_LABEL, OCCURRENCE_STATUS_LABEL, PRIORITY_LABEL, PRIORITY_TEXT_TONE, PRIORITY_TONE,
 } from "@/api/labels"
 import type { Occurrence, OccurrencePriority } from "@/api/types"
+import { ErrorBox, LoadingBlock } from "@/components/layout/feedback"
 import IncidentMap from "@/components/mapa/incident-map"
 import type { IncidentMapMode, IncidentPoint } from "@/components/mapa/incident-map"
 import type { LiveVehicle } from "@/components/mapa/map/vehicle-markers"
-import { OccurrenceAvatar } from "@/components/occurrence-icon"
 import { useRealtime } from "@/hooks/use-realtime"
 import { useResource } from "@/hooks/use-resource"
 import { toNumber } from "@/lib/format"
 import { stationsOf } from "@/lib/geo"
 import { cn } from "@/lib/utils"
+import { AnimatedNumber } from "@/components/operational/animated-number"
+import { useOperationClock } from "@/components/operational/use-operation-clock"
+import { useNewOccurrences } from "@/components/operational/use-new-occurrences"
 
 const SEVERITY: Record<OccurrencePriority, number> = { CRITICA: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 }
 const OPEN_STATUSES = ["ABERTA", "DESPACHADA", "EM_ATENDIMENTO"] as const
@@ -42,7 +45,8 @@ function waited(from: string, now: number): string {
 
 export default function Telao() {
   const navigate = useNavigate()
-  const [now, setNow] = useState(() => Date.now())
+  const now = useOperationClock()
+  const newCalls = useNewOccurrences()
   const [mode, setMode] = useState<IncidentMapMode>("points")
 
   const open = useResource(async () => {
@@ -62,20 +66,21 @@ export default function Telao() {
 
   // Position reports move the chips in place; refetching the whole fleet on
   // every GPS ping would be wasteful.
-  const [moved, setMoved] = useState<Record<string, { latitude: number, longitude: number }>>({})
+  const [moved, setMoved] = useState<Record<string, { latitude: number, longitude: number, recorded_at?: string, heading?: number | null }>>({})
 
   const { connected } = useRealtime(useCallback((event) => {
     if (event.type === "vehicle.moved") {
-      setMoved((current) => ({ ...current, [event.payload.id]: { latitude: Number(event.payload.latitude), longitude: Number(event.payload.longitude) } }))
+      setMoved((current) => ({ ...current, [event.payload.id]: { latitude: Number(event.payload.latitude), longitude: Number(event.payload.longitude), recorded_at: event.payload.recorded_at, heading: event.payload.heading } }))
       return
     }
     if (event.type !== "connected" && event.type !== "occurrence.timeline") reload()
   }, [reload]))
 
   useEffect(() => {
-    const clock = window.setInterval(() => setNow(Date.now()), 1000)
-    const refresh = window.setInterval(reload, 30_000)
-    return () => { window.clearInterval(clock); window.clearInterval(refresh) }
+    const refresh = window.setInterval(() => { if (!document.hidden) reload() }, 30_000)
+    const visible = () => { if (!document.hidden) reload() }
+    document.addEventListener('visibilitychange', visible)
+    return () => { window.clearInterval(refresh); document.removeEventListener('visibilitychange', visible) }
   }, [reload])
 
   const calls = useMemo(() => [...(open.data ?? [])].sort((a, b) =>
@@ -120,92 +125,125 @@ export default function Telao() {
     const longitude = latest?.longitude ?? toNumber(vehicle.current_longitude)
     if (latitude === null || longitude === null) return []
     if (vehicle.status !== "EMPENHADA" && !latest) return []
-    return [{ id: vehicle.id, prefix: vehicle.prefix, status: vehicle.status, latitude, longitude }]
-  }), [fleet.data, moved])
+    return [{ id: vehicle.id, prefix: vehicle.prefix, status: vehicle.status, latitude, longitude, recorded_at: latest?.recorded_at ?? vehicle.last_position_at, heading: latest?.heading, type: vehicle.type, appearance: vehicle.appearance, arrived_at: active.data?.items.find((entry) => entry.vehicle_id === vehicle.id && entry.status === "NO_LOCAL")?.arrived_at }]
+  }), [fleet.data, moved, active.data])
   const critical = calls.filter((call) => call.priority === "CRITICA").length
   const clock = new Date(now)
+  const failures = [
+    open.error && `Ocorrências: ${open.error}`,
+    fleet.error && `Frota: ${fleet.error}`,
+    active.error && `Despachos: ${active.error}`,
+    unitList.error && `Quartéis: ${unitList.error}`,
+  ].filter(Boolean)
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-chrome text-chrome-ink">
-      <header className="flex shrink-0 items-center gap-6 border-b border-chrome-line px-6 py-3">
-        <Link to="/" className="label-caps text-chrome-muted hover:text-white">ZENO · COBOM Taubaté</Link>
-        <span className={cn("label-caps inline-flex items-center gap-1.5 rounded-sm border px-2 py-1", connected ? "border-accent/40" : "border-alert/60 bg-alert/30")}>
+    <div className="flex min-h-dvh flex-col bg-canvas text-ink lg:h-dvh lg:overflow-hidden">
+      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-chrome-line bg-chrome px-4 py-3 text-chrome-ink sm:gap-5 sm:px-6">
+        <div className="mr-auto">
+          <Link to="/" className="flex items-center gap-3 text-chrome-muted"><img src="/zeno-logo.svg" alt="ZENO · Início" width={101} height={24} /><span className="label-caps">COBOM Taubaté</span></Link>
+          <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">Painel da central</h1>
+        </div>
+        <span className={cn("label-caps inline-flex max-w-full items-center gap-1.5 border px-2 py-1", connected ? "border-ok/30 bg-ok-soft text-ok" : "border-alert/40 bg-alert-soft text-alert")}>
           <Radio className={cn("h-3.5 w-3.5", connected && "animate-pulse")} />
           {connected ? "Ao vivo" : "Sem conexão — dados podem estar desatualizados"}
         </span>
-        <div className="ml-auto flex items-baseline gap-3">
-          <span className="text-sm text-chrome-muted">{clock.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}</span>
-          <time className="text-4xl font-semibold tabular-nums">{clock.toLocaleTimeString("pt-BR")}</time>
+        <div className="flex flex-col sm:items-end">
+          <time className="text-2xl font-semibold tabular-nums tracking-tight sm:text-3xl">{clock.toLocaleTimeString("pt-BR")}</time>
+          <span className="text-xs text-chrome-muted">{clock.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}</span>
         </div>
         <button
           type="button"
           onClick={() => document.documentElement.requestFullscreen?.()}
-          className="rounded-sm border border-chrome-line p-2 text-chrome-muted hover:text-white"
+          className="ml-auto border border-chrome-line p-2.5 text-chrome-muted hover:border-accent hover:text-chrome-ink sm:ml-0"
           aria-label="Tela cheia"
         >
           <Maximize className="h-5 w-5" />
         </button>
       </header>
 
-      <div className="grid shrink-0 grid-cols-2 gap-px bg-chrome-line md:grid-cols-5">
-        <Figure label="Ocorrências em aberto" value={calls.length} />
-        <Figure label="Críticas" value={critical} tone={critical > 0 ? "text-[#F08A80]" : undefined} />
-        <Figure label="Viaturas livres" value={fleetCounts.free} tone="text-[#8FD0B0]" />
-        <Figure label="Viaturas empenhadas" value={fleetCounts.busy} tone="text-[#9CC7EA]" />
-        <Figure label="Fora de operação" value={fleetCounts.down} />
+      {failures.length > 0 && (
+        <div className="shrink-0 px-4 pt-4 sm:px-6">
+          <ErrorBox
+            message={`${failures.join(" · ")} Os dados já carregados permanecem visíveis e podem estar desatualizados.`}
+            onRetry={() => { reload(); unitList.reload() }}
+          />
+        </div>
+      )}
+
+      <div className="grid shrink-0 grid-cols-2 gap-3 px-4 py-4 sm:grid-cols-3 sm:px-6 lg:grid-cols-5">
+        <Figure label="Ocorrências em aberto" value={open.data ? calls.length : null} />
+        <Figure label="Críticas" value={open.data ? critical : null} tone={critical > 0 ? "text-alert border-t-alert" : undefined} />
+        <Figure label="Viaturas livres" value={fleet.data ? fleetCounts.free : null} tone="text-ok border-t-ok" />
+        <Figure label="Viaturas empenhadas" value={fleet.data ? fleetCounts.busy : null} tone="text-accent border-t-accent" />
+        <Figure label="Fora de operação" value={fleet.data ? fleetCounts.down : null} />
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <ol className="min-h-0 overflow-y-auto border-r border-chrome-line">
-          {calls.length === 0 && <li className="px-6 py-10 text-xl text-chrome-muted">Nenhuma ocorrência em aberto.</li>}
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 px-4 pb-4 sm:px-6 sm:pb-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <section className="order-2 flex min-h-0 min-w-0 flex-col border border-line bg-surface lg:order-1" aria-label="Mapa operacional">
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-surface-muted px-4 py-3">
+            <h2 className="text-sm font-semibold">Mapa operacional</h2>
+            <span className="text-xs text-ink-muted">Ocorrências e frota em campo</span>
+          </header>
+          <IncidentMap
+            incidents={points}
+            operational
+            wallboard
+            dispatches={active.data?.items}
+            stations={stations}
+            mode={mode}
+            onModeChange={setMode}
+            onOpen={(id) => navigate(`/ocorrencias/${id}`)}
+            vehicles={liveVehicles}
+            unlocatedVehicles={(fleet.data?.items ?? []).filter((vehicle) => vehicle.current_latitude == null || vehicle.current_longitude == null).map((vehicle) => vehicle.prefix)}
+            className="h-[380px] w-full lg:h-full lg:min-h-0 lg:flex-1"
+          />
+        </section>
+        <section className="order-1 flex min-h-0 min-w-0 flex-col border border-line bg-surface lg:order-2" aria-label="Fila de ocorrências">
+          <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-muted px-4 py-3">
+            <h2 className="text-sm font-semibold">Fila de ocorrências</h2>
+            <span className="text-xs text-ink-muted">Prioridade · tempo desde a abertura</span>
+          </header>
+          <ol className="min-h-0 overflow-y-auto" aria-busy={open.loading}>
+          {open.loading && !open.data && <li className="p-4"><LoadingBlock label="Carregando a fila de ocorrências…" /></li>}
+          {!open.loading && open.error && !open.data && <li className="px-5 py-10 text-lg text-ink-muted">Fila indisponível. Tente atualizar os dados.</li>}
+          {open.data && !open.error && calls.length === 0 && <li className="px-5 py-10 text-lg text-ink-muted">Nenhuma ocorrência em aberto.</li>}
           {calls.map((call) => (
-            <li key={call.id}>
+            <li key={call.id} className={newCalls.has(call.id) ? 'op-new-call' : undefined}>
               <button
                 type="button"
                 onClick={() => navigate(`/ocorrencias/${call.id}`)}
-                className="flex w-full items-stretch border-b border-chrome-line text-left hover:bg-chrome-soft"
+                className="flex w-full min-w-0 items-stretch border-b border-line text-left transition-colors hover:bg-accent-soft"
               >
-                <span aria-hidden className={cn("w-2 shrink-0", PRIORITY_TONE[call.priority])} />
-                <span className="flex flex-1 items-center gap-4 px-4 py-3">
-                  <OccurrenceAvatar nature={call.nature} />
+                <span aria-hidden className={cn("my-4 w-0.5 shrink-0", PRIORITY_TONE[call.priority])} />
+                <span className="flex min-w-0 flex-1 items-start gap-3 px-3 py-4 sm:px-4">
                   <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="text-lg font-semibold">{NATURE_LABEL[call.nature]}</span>
-                    <span className="truncate text-chrome-muted">{call.address}</span>
-                    <span className="text-sm text-chrome-muted">
-                      {call.protocol} · {PRIORITY_LABEL[call.priority]} · {OCCURRENCE_STATUS_LABEL[call.status]}
+                    <span className={cn("label-caps mb-1", PRIORITY_TEXT_TONE[call.priority])}>{PRIORITY_LABEL[call.priority]}</span>
+                    <span className="text-base font-semibold leading-snug lg:text-lg">{NATURE_LABEL[call.nature]}</span>
+                    <span className="mt-1 text-sm text-ink-muted">{call.address}</span>
+                    <span className="mt-2 text-xs leading-relaxed text-ink-soft">
+                      {call.protocol} · {OCCURRENCE_STATUS_LABEL[call.status]}
                       {byOccurrence.get(call.id)?.length ? ` · ${byOccurrence.get(call.id)!.join(", ")}` : call.status === "ABERTA" ? " · aguardando viatura" : ""}
                     </span>
                   </span>
-                  <span className={cn("shrink-0 text-3xl font-semibold tabular-nums", call.status === "ABERTA" && call.priority !== "BAIXA" ? "text-[#F2C46D]" : "text-chrome-ink")}>
+                  <span className={cn("shrink-0 pt-4 text-xl font-semibold tabular-nums tracking-tight lg:text-3xl", call.status === "ABERTA" && call.priority !== "BAIXA" ? "text-warn" : "text-ink")}>
                     {waited(call.opened_at, now)}
                   </span>
                 </span>
               </button>
             </li>
           ))}
-        </ol>
-
-        <div className="hidden min-h-0 lg:block">
-          <IncidentMap
-            incidents={points}
-            stations={stations}
-            mode={mode}
-            onModeChange={setMode}
-            onOpen={(id) => navigate(`/ocorrencias/${id}`)}
-            vehicles={liveVehicles}
-            className="h-full w-full"
-          />
-        </div>
-      </div>
+          </ol>
+        </section>
+      </main>
     </div>
   )
 }
 
-function Figure({ label, value, tone }: { label: string, value: number, tone?: string }) {
+function Figure({ label, value, tone }: { label: string, value: number | null, tone?: string }) {
   return (
-    <div className="flex flex-col bg-chrome px-6 py-3">
-      <span className="label-caps text-chrome-muted">{label}</span>
-      <span className={cn("text-5xl font-semibold tabular-nums", tone)}>{value}</span>
+    <div className={cn("flex flex-col gap-3 border border-line border-t-2 bg-surface px-4 py-4 last:col-span-2 sm:last:col-span-1", tone)}>
+      <span className="label-caps text-ink-muted">{label}</span>
+      <span className="text-4xl font-semibold tabular-nums tracking-tight lg:text-5xl"><AnimatedNumber value={value} /></span>
     </div>
   )
 }

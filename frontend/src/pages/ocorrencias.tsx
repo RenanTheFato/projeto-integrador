@@ -1,10 +1,4 @@
-/**
- * The incident list — the screen a dispatcher lives on.
- *
- * The first version rendered seven identical coloured cards written by hand.
- * The card survived; what feeds it is now the API, with the severity colour
- * driven by the priority the backend stores.
- */
+/** Operational incident register, refreshed by the dispatch live feed. */
 
 import { useCallback, useMemo, useState } from "react"
 import type { FormEvent } from "react"
@@ -23,12 +17,13 @@ import {
 } from "@/components/layout/kit"
 import { EmptyState, ErrorBox, ErrorDetails, LoadingBlock } from "@/components/layout/feedback"
 import RouteMap from "@/components/mapa/route-map"
-import { OccurrenceAvatar } from "@/components/occurrence-icon"
 import { AddressSearch } from "@/components/occurrence/address-search"
 import { useRealtime } from "@/hooks/use-realtime"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatDistance, formatElapsed, formatShort } from "@/lib/format"
 import { nearestTo, stationsOf } from "@/lib/geo"
+import { PaginatedExport } from "@/components/layout/export-button"
+import { occurrenceReport } from "@/lib/report-builders"
 
 const PER_PAGE = 12
 
@@ -80,14 +75,20 @@ export default function Ocorrencias() {
         title="Ocorrências"
         subtitle="Chamados registrados e seu andamento"
         actions={
+          <>
+          <PaginatedExport title="ocorrências" description="PDF para leitura e Excel para análise, com os filtros aplicados nesta lista."
+            data={list.data} disabled={list.loading || Boolean(list.error)}
+            fetchPage={(page, per_page) => occurrences.list({ page, per_page, status: (status || undefined) as OccurrenceStatus | undefined, nature: (nature || undefined) as OccurrenceNature | undefined, priority: (priority || undefined) as OccurrencePriority | undefined, search: applied || undefined })}
+            report={(rows, scope) => occurrenceReport(rows, `${scope} | Situação: ${OCCURRENCE_STATUS_LABEL[status as OccurrenceStatus] ?? "Todas"} | Natureza: ${NATURE_LABEL[nature as OccurrenceNature] ?? "Todas"} | Prioridade: ${PRIORITY_LABEL[priority as OccurrencePriority] ?? "Todas"} | Busca: ${applied || "Sem busca"}`)} />
           <ActionButton tone="primary" onClick={() => setCreating(true)}>
             <Plus className="h-5 w-5" />
             Nova ocorrência
           </ActionButton>
+          </>
         }
       />
 
-      <Panel title="Filtros" icon={<Filter className="h-5 w-5" />}>
+      <Panel title="Filtros operacionais" icon={<Filter className="h-4 w-4" />}>
         <form onSubmit={applyFilters} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <Field label="Situação">
             <Select
@@ -144,11 +145,24 @@ export default function Ocorrencias() {
         />
       )}
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        {(list.data?.items ?? []).map((occurrence) => (
-          <OccurrenceCard key={occurrence.id} occurrence={occurrence} />
-        ))}
-      </div>
+      {Boolean(list.data?.items.length) && (
+        <section aria-label="Chamados registrados" className="min-w-0 border border-line bg-surface">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-muted px-4 py-3 sm:px-5">
+            <h2 className="text-sm font-semibold text-ink">Chamados registrados</h2>
+            <span className="text-xs tabular-nums text-ink-muted">{list.data?.total.toLocaleString("pt-BR")} registros · mais recentes primeiro</span>
+          </header>
+          <div aria-hidden className="label-caps hidden gap-4 border-b border-line px-5 py-3 text-ink-soft lg:grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.8fr)_100px_160px_130px]">
+            <span>Ocorrência</span><span>Local</span><span>Prioridade</span><span>Situação</span><span>Abertura</span>
+          </div>
+          <ul>
+            {(list.data?.items ?? []).map((occurrence) => (
+              <li key={occurrence.id} className="border-b border-line last:border-b-0">
+                <OccurrenceRow occurrence={occurrence} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {list.data && (
         <Pagination page={list.data.page} perPage={list.data.per_page} total={list.data.total} onPage={setPage} />
@@ -164,42 +178,36 @@ export default function Ocorrencias() {
   )
 }
 
-function OccurrenceCard({ occurrence }: { occurrence: Occurrence }) {
+function OccurrenceRow({ occurrence }: { occurrence: Occurrence }) {
   return (
     <Link
       to={`/ocorrencias/${occurrence.id}`}
-      className="flex min-w-0 flex-col rounded-sm border border-line bg-surface transition-colors hover:border-accent/50 hover:bg-accent-soft sm:flex-row"
+      className="relative grid min-w-0 grid-cols-2 items-center gap-x-4 gap-y-3 px-4 py-4 transition-colors hover:bg-accent-soft focus-visible:bg-accent-soft sm:px-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.8fr)_100px_160px_130px]"
     >
-      {/* Severity is a rail, not a fill. Fifteen filled cards is a wall of
-          colour that says nothing; fifteen rails are a column the eye can run
-          down and find the worst call in. */}
       <span
         aria-hidden
-        className={`h-1.5 w-full shrink-0 sm:h-auto sm:w-1.5 ${PRIORITY_TONE[occurrence.priority]}`}
+        className={`absolute inset-y-3 left-0 w-0.5 ${PRIORITY_TONE[occurrence.priority]}`}
       />
-
-      <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-5">
-        <OccurrenceAvatar nature={occurrence.nature} tone={PRIORITY_TEXT_TONE[occurrence.priority]} />
-
-        <div className="min-w-0">
-          <p className="truncate font-semibold text-ink">{NATURE_LABEL[occurrence.nature]}</p>
-          <p className="truncate text-sm text-ink-muted">{occurrence.address}</p>
-          <p className="text-xs text-ink-soft">
-            {formatShort(occurrence.opened_at)} — {formatElapsed(occurrence.opened_at)}
-          </p>
-        </div>
+      <div className="col-span-2 min-w-0 lg:col-span-1">
+        <p className="font-mono text-sm font-semibold text-ink">{occurrence.protocol}</p>
+        <p className="mt-1 text-sm text-ink-muted">{NATURE_LABEL[occurrence.nature]}</p>
       </div>
-
-      {/* On a phone the protocol column sits under the card instead of
-          squeezing the address into a couple of characters. */}
-      <div className="flex w-full shrink-0 flex-row items-center justify-between gap-2 border-t border-line px-4 py-3 sm:w-44 sm:flex-col sm:items-end sm:justify-center sm:border-l sm:border-t-0 sm:px-4 sm:py-4">
-        <span className="font-mono text-xs text-ink-soft">{occurrence.protocol}</span>
+      <p className="col-span-2 min-w-0 text-sm leading-relaxed text-ink lg:col-span-1">{occurrence.address}</p>
+      <div className="flex min-w-0 flex-col items-start gap-1.5">
+        <span className="label-caps text-ink-soft lg:hidden">Prioridade</span>
+        <span className={`label-caps inline-flex border border-current/25 px-2 py-0.5 ${PRIORITY_TEXT_TONE[occurrence.priority]}`}>
+          {PRIORITY_LABEL[occurrence.priority]}
+        </span>
+      </div>
+      <div className="flex min-w-0 flex-col items-start gap-1.5">
+        <span className="label-caps text-ink-soft lg:hidden">Situação</span>
         <Badge tone={OCCURRENCE_STATUS_TONE[occurrence.status]}>
           {OCCURRENCE_STATUS_LABEL[occurrence.status]}
         </Badge>
-        <span className={`label-caps ${PRIORITY_TEXT_TONE[occurrence.priority]}`}>
-          {PRIORITY_LABEL[occurrence.priority]}
-        </span>
+      </div>
+      <div className="col-span-2 flex flex-wrap items-center gap-x-2 border-t border-line pt-3 text-xs tabular-nums text-ink-muted lg:col-span-1 lg:flex-col lg:items-start lg:gap-1 lg:border-0 lg:pt-0">
+        <time dateTime={occurrence.opened_at}>{formatShort(occurrence.opened_at)}</time>
+        <span className="text-ink-soft">{formatElapsed(occurrence.opened_at)}</span>
       </div>
     </Link>
   )

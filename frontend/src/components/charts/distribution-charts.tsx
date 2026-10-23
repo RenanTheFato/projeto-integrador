@@ -4,11 +4,11 @@ import { curvePath } from "./curve"
 import { useMeasure } from "@/hooks/use-measure"
 import "./charts.css"
 
-const BAR_COLOR = "#245F73"
-const CONTEXT_COLOR = "#697D8D"
-const GRID_COLOR = "#D7E0E3"
-const AXIS_INK = "#526673"
-const SURFACE = "#F7F9F8"
+const BAR_COLOR = "var(--color-accent)"
+const CONTEXT_COLOR = "var(--color-ink-soft)"
+const GRID_COLOR = "var(--color-line)"
+const AXIS_INK = "var(--color-ink-muted)"
+const SURFACE = "var(--color-canvas)"
 const number = (value: number) => value.toLocaleString("pt-BR")
 
 function countScale(maximum: number, divisions = 4) {
@@ -64,7 +64,7 @@ export function HourHistogram({ counts }: { counts: number[] }) {
   const y = (value: number) => PADDING.top + plotHeight - value / max * plotHeight
 
   return <div className="chart-histogram">
-    <div className="chart-section-heading"><div><h3>Volume por hora</h3><p>Acumulado de todos os dias do recorte</p></div><span className="chart-unit">ocorrências</span></div>
+    <div className="chart-section-heading"><p>Acumulado de todos os dias do recorte</p></div>
     <div ref={ref} className="chart-plot relative w-full">
       {!total ? <p className="chart-empty">Nenhuma ocorrência no período filtrado.</p> : width > 0 && <svg width={width} height={HISTOGRAM_HEIGHT} role="group" aria-label="Distribuição de ocorrências por hora do dia">
         {ticks.map((tick) => <g key={tick}><line x1={PADDING.left} y1={y(tick)} x2={width - PADDING.right} y2={y(tick)} stroke={GRID_COLOR} strokeDasharray={tick === 0 ? undefined : "2 4"} /><text x={PADDING.left - 8} y={y(tick) + 4} textAnchor="end" fontSize={11} fill={AXIS_INK}>{number(tick)}</text></g>)}
@@ -134,7 +134,7 @@ export function TimeSeries({ current, previous, currentLabel, previousLabel }: {
   </div>
 }
 
-const RAMP = ["#EDF1F0", "#DCE8E6", "#B2CECC", "#7BA6AD", "#3C7687", "#234F63"]
+const RAMP = ["#172633", "#23434f", "#2b6170", "#408595", "#69a7b4", "#a0cdd4"]
 const rampColor = (ratio: number) => RAMP[ratio <= 0 ? 0 : Math.min(RAMP.length - 1, Math.max(1, Math.ceil(ratio * (RAMP.length - 1))))]
 
 export function HeatGrid({ rows, values }: { rows: string[]; values: number[][] }) {
@@ -148,7 +148,7 @@ export function HeatGrid({ rows, values }: { rows: string[]; values: number[][] 
   const active = hover ?? { row: 0, hour: 0 }
 
   return <div className="chart-heatgrid">
-    <div className="chart-section-heading"><div><h3>Distribuição semanal</h3><p>Dia da semana × hora de abertura</p></div></div>
+    <div className="chart-section-heading"><p>Dia da semana × hora de abertura</p></div>
     <div ref={ref} className="chart-heatgrid-plot">
       {!total ? <p className="chart-empty">Nenhuma ocorrência no período filtrado.</p> : width > 0 && <svg width={width} height={rows.length * cellHeight + 25} role="group" aria-label="Ocorrências por dia da semana e hora do dia">
         {rows.map((row, rowIndex) => <g key={row}>
@@ -156,7 +156,7 @@ export function HeatGrid({ rows, values }: { rows: string[]; values: number[][] 
           {(values[rowIndex] ?? []).map((value, hour) => <rect key={hour} x={labelWidth + hour * cell + 1} y={rowIndex * cellHeight + 1} width={Math.max(1, cell - 2)} height={cellHeight - 2} fill={rampColor(value / max)} />)}
         </g>)}
         {[0, 3, 6, 9, 12, 15, 18, 21].map((hour) => <text key={hour} x={labelWidth + hour * cell + cell / 2} y={rows.length * cellHeight + 18} textAnchor="middle" fontSize={11} fill={AXIS_INK}>{hour}h</text>)}
-        {hover && <rect x={labelWidth + hover.hour * cell + 1} y={hover.row * cellHeight + 1} width={Math.max(1, cell - 2)} height={cellHeight - 2} fill="none" stroke="#152F40" strokeWidth={2} />}
+        {hover && <rect x={labelWidth + hover.hour * cell + 1} y={hover.row * cellHeight + 1} width={Math.max(1, cell - 2)} height={cellHeight - 2} fill="none" stroke="var(--color-ink)" strokeWidth={2} />}
         <rect x={labelWidth} y={0} width={cell * 24} height={rows.length * cellHeight} fill="transparent" tabIndex={0} role="slider" aria-label="Consultar distribuição semanal. Setas esquerda e direita mudam a hora; acima e abaixo mudam o dia." aria-valuemin={0} aria-valuemax={rows.length * 24 - 1} aria-valuenow={active.row * 24 + active.hour} aria-valuetext={`${rows[active.row]}, ${active.hour}h: ${values[active.row]?.[active.hour] ?? 0} ocorrências`}
           onFocus={() => setHover(active)} onBlur={() => setHover(null)}
           onKeyDown={(event) => { if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return; event.preventDefault(); setHover({ row: Math.max(0, Math.min(rows.length - 1, active.row + (event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0))), hour: event.key === "Home" ? 0 : event.key === "End" ? 23 : Math.max(0, Math.min(23, active.hour + (event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0))) }) }}

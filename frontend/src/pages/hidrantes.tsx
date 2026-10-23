@@ -24,6 +24,8 @@ import { AddressSearch } from "@/components/occurrence/address-search"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatDate, toNumber } from "@/lib/format"
 import { stationsOf } from "@/lib/geo"
+import { ExportButton } from "@/components/layout/export-button"
+import { waterReport } from "@/lib/report-builders"
 
 
 
@@ -56,19 +58,25 @@ export default function Hidrantes() {
         title="Pontos de água"
         subtitle="Hidrantes, cisternas e pontos de captação disponíveis às guarnições."
         actions={(
+          <>
+          <ExportButton title="pontos de água" description={`Todos os ${list.data?.length.toLocaleString("pt-BR") ?? "—"} pontos do filtro atual, com vazão e data da última inspeção.`}
+            disabled={list.loading || Boolean(list.error) || !list.data?.length}
+            createReport={() => waterReport(list.data ?? [], `Todos os resultados filtrados | Situação: ${WATER_STATUS_LABEL[status as WaterSourceStatus] ?? "Todas"}`)} />
           <ActionButton tone="primary" onClick={() => setEditing("new")}>
             <Plus className="h-5 w-5" />
             Novo ponto
           </ActionButton>
+          </>
         )}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatBox icon={<Droplets className="h-4 w-4" />} label="Cadastrados" value={counts.total} />
-        <StatBox label="Operantes" value={counts.working} tone="text-ok" />
-        <StatBox label="Inoperantes" value={counts.broken} tone="text-alert" />
-        <StatBox label="Inspeção vencida" value={counts.overdue} hint="Sem teste há mais de um ano" tone="text-warn" />
+        <StatBox icon={<Droplets className="h-4 w-4" />} label="Cadastrados" value={all.data ? counts.total : "—"} />
+        <StatBox label="Operantes" value={all.data ? counts.working : "—"} tone="text-ok" />
+        <StatBox label="Inoperantes" value={all.data ? counts.broken : "—"} tone="text-alert" />
+        <StatBox label="Inspeção vencida" value={all.data ? counts.overdue : "—"} hint="Sem teste há mais de um ano" tone="text-warn" />
       </div>
+      {all.error && <ErrorBox message={`Indicadores indisponíveis. ${all.error}`} onRetry={all.reload} />}
 
       <Panel
         title="Cadastro"

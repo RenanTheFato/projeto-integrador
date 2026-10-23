@@ -9,7 +9,7 @@
 import { useCallback, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import { ArrowLeft, Brain, ListOrdered, MapPin, Pencil, Play, Printer, Route as RouteIcon, Send, Sparkles, Truck } from "lucide-react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useParams, useSearchParams } from "react-router-dom"
 
 import { crews, dispatches, occurrences, units, vehicles } from "@/api/endpoints"
 import { translateMessage } from "@/api/messages"
@@ -30,7 +30,8 @@ import RouteMap from "@/components/mapa/route-map"
 import { OccurrenceAvatar } from "@/components/occurrence-icon"
 import { printOccurrenceReport } from "@/components/occurrence/print-report"
 import { SceneSupport } from "@/components/occurrence/scene-support"
-import { TimelinePanel } from "@/components/occurrence/timeline-panel"
+import { OccurrenceReplay } from "@/components/operational/occurrence-replay"
+import { OccurrenceStages } from "@/components/operational/occurrence-stages"
 import { useTimeline } from "@/hooks/use-timeline"
 import { VehicleRecommendations } from "@/components/occurrence/vehicle-recommendations"
 import { RouteInsight } from "@/components/route/route-insight"
@@ -44,6 +45,7 @@ import { stationsOf } from "@/lib/geo"
 
 export default function OcorrenciaDetalhe() {
   const { id = "" } = useParams()
+  const [searchParams] = useSearchParams()
   const [dispatching, setDispatching] = useState(false)
   const [editing, setEditing] = useState(false)
   const [theater, setTheater] = useState(false)
@@ -142,6 +144,7 @@ export default function OcorrenciaDetalhe() {
       />
 
       {changeStatus.error && <ErrorBox message={changeStatus.error} />}
+      <OccurrenceStages occurrence={occurrence} events={timeline.data ?? []} />
 
       {/* The severity band of the first version filled this whole strip. One
           incident deserves the emphasis, but as a rail down the side, so the
@@ -245,6 +248,16 @@ export default function OcorrenciaDetalhe() {
             theater={theater}
             onTheaterToggle={() => setTheater((current) => !current)}
             simulationRequest={replayRequest}
+            presentationStep={searchParams.get('presentation')}
+            routeSegments={displayedRoute?.segments}
+            routeFeatures={displayedRoute?.route_features}
+            destinationPoint={toNumber(occurrence.latitude) !== null && toNumber(occurrence.longitude) !== null ? { latitude: Number(occurrence.latitude), longitude: Number(occurrence.longitude) } : undefined}
+            occurrenceNature={occurrence.nature}
+            occurrencePriority={occurrence.priority}
+            vehicleVisual={current?.vehicle ? { type: current.vehicle.type, prefix: current.vehicle.prefix, unit_acronym: occurrence.unit?.acronym } : undefined}
+            routeSteps={displayedRoute?.steps}
+            routeSeconds={displayedRoute?.estimated_time_seconds}
+            criticalMode={displayedRoute?.algorithm === 'CRITICAL'}
             speedSegments={explain ? displayedRoute?.segments ?? null : null}
             focus={focus}
             originLabel="Saída da viatura"
@@ -271,7 +284,7 @@ export default function OcorrenciaDetalhe() {
 
         <SceneSupport occurrence={occurrence} />
 
-        <TimelinePanel occurrenceId={occurrence.id} closed={closed} timeline={timeline} />
+        <OccurrenceReplay occurrence={occurrence} timeline={timeline} stations={stations} />
 
         <Panel title="Despachos" icon={<Truck className="h-5 w-5" />}>
           {dispatchList.length === 0 && (

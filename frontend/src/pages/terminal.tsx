@@ -21,7 +21,7 @@ import {
 } from "@/api/labels"
 import type { DispatchStatus, Vehicle } from "@/api/types"
 import { Badge } from "@/components/layout/kit"
-import { ErrorBox, FullPageSpinner } from "@/components/layout/feedback"
+import { EmptyState, ErrorBox, FullPageSpinner, LoadingBlock } from "@/components/layout/feedback"
 import RouteMap from "@/components/mapa/route-map"
 import { RouteGuide } from "@/components/route/route-guide"
 import { RouteSteps } from "@/components/route/route-steps"
@@ -74,21 +74,22 @@ function ChooseVehicle() {
   }, [fleet.data])
 
   return (
-    <div className="min-h-screen bg-chrome text-chrome-ink">
-      <header className="flex items-center justify-between border-b border-chrome-line px-4 py-3">
+    <div className="min-h-screen bg-canvas text-ink">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-chrome-line bg-chrome px-4 py-3 text-chrome-ink">
         <div>
           <p className="label-caps text-chrome-muted">Terminal da viatura</p>
           <h1 className="text-xl font-semibold">Qual viatura é esta?</h1>
         </div>
-        <Link to="/" className="text-sm text-chrome-muted underline underline-offset-2 hover:text-white">Voltar ao console</Link>
+        <Link to="/" className="text-sm text-chrome-muted underline underline-offset-2 hover:text-chrome-ink">Voltar ao console</Link>
       </header>
 
       <main className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6">
-        {fleet.loading && <p className="text-chrome-muted">Carregando a frota...</p>}
+        {fleet.loading && !fleet.data && <LoadingBlock label="Carregando a frota…" />}
         {fleet.error && <ErrorBox message={fleet.error} onRetry={fleet.reload} />}
+        {fleet.data && !fleet.error && grouped.length === 0 && <EmptyState title="Nenhuma viatura cadastrada" description="As viaturas cadastradas no console aparecem aqui para iniciar o terminal." />}
         {grouped.map(([unit, items]) => (
           <section key={unit} className="flex flex-col gap-2">
-            <h2 className="label-caps text-chrome-muted">{unit}</h2>
+            <h2 className="label-caps text-ink-muted">{unit}</h2>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
               {items.map((vehicle) => (
                 <button
@@ -99,12 +100,13 @@ function ChooseVehicle() {
                     navigate(`/terminal/${vehicle.id}`)
                   }}
                   className={cn(
-                    "flex min-h-20 flex-col items-start justify-between rounded-sm border bg-chrome-soft px-3 py-2 text-left transition-colors hover:border-accent",
-                    vehicle.id === last ? "border-accent" : "border-chrome-line",
+                    "flex min-h-20 flex-col items-start justify-between rounded-sm border bg-surface px-3 py-2 text-left transition-colors hover:border-accent",
+                    vehicle.id === last ? "border-accent" : "border-line",
                   )}
                 >
                   <span className="text-lg font-semibold">{vehicle.prefix}</span>
-                  <span className="text-xs text-chrome-muted">{VEHICLE_TYPE_LABEL[vehicle.type]} · {VEHICLE_STATUS_LABEL[vehicle.status]}</span>
+                  {vehicle.id === last && <span className="label-caps text-accent">Última utilizada</span>}
+                  <span className="text-xs text-ink-muted">{VEHICLE_TYPE_LABEL[vehicle.type]} · {VEHICLE_STATUS_LABEL[vehicle.status]}</span>
                 </button>
               ))}
             </div>
@@ -146,12 +148,12 @@ function VehicleTerminal({ vehicleId }: { vehicleId: string }) {
   // occurrence detail, so the hooks see it as soon as it loads.
   const loadedDispatch = occurrence.data?.dispatches?.find((item) => item.id === current?.id) ?? null
   const loadedRoute = loadedDispatch?.used_route ?? loadedDispatch?.routes?.find((item) => item.id === loadedDispatch.used_route_id) ?? null
-  const simulation = useRouteSimulation(loadedRoute?.geometry ?? null, loadedRoute?.estimated_time_seconds ?? 0)
+  const simulation = useRouteSimulation(loadedRoute?.geometry ?? null, loadedRoute?.estimated_time_seconds ?? 0, loadedRoute?.segments)
   const livePosition = simulation.position ?? gps.position
   useReportSimulatedPosition(vehicleId, simulation.position)
 
-  if (vehicle.loading && !vehicle.data) return <div className="min-h-screen bg-chrome"><FullPageSpinner label="Abrindo terminal..." /></div>
-  if (vehicle.error) return <div className="min-h-screen bg-chrome p-4"><ErrorBox message={vehicle.error} onRetry={vehicle.reload} /></div>
+  if (vehicle.loading && !vehicle.data) return <div className="min-h-screen bg-canvas"><FullPageSpinner label="Abrindo terminal..." /></div>
+  if (vehicle.error && !vehicle.data) return <div className="min-h-screen bg-canvas p-4"><ErrorBox message={vehicle.error} onRetry={vehicle.reload} /></div>
   if (!vehicle.data) return null
 
   const detail = occurrence.data
@@ -162,7 +164,7 @@ function VehicleTerminal({ vehicleId }: { vehicleId: string }) {
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
       <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b border-chrome-line bg-chrome px-3 py-2 text-chrome-ink sm:px-4">
-        <Link to="/terminal" className="rounded-sm border border-chrome-line p-2 text-chrome-muted hover:text-white" aria-label="Trocar de viatura">
+        <Link to="/terminal" className="flex min-h-11 min-w-11 items-center justify-center rounded-sm border border-chrome-line p-2 text-chrome-muted hover:text-chrome-ink" aria-label="Trocar de viatura">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <Truck className="h-6 w-6 text-chrome-muted" />
@@ -176,14 +178,14 @@ function VehicleTerminal({ vehicleId }: { vehicleId: string }) {
           onClick={gps.toggle}
           aria-pressed={gps.sharing}
           className={cn(
-            "flex items-center gap-2 rounded-sm border px-3 py-2 text-sm font-semibold",
-            gps.sharing ? "border-ok bg-ok text-white" : "border-chrome-line text-chrome-ink hover:bg-chrome-soft",
+            "flex min-h-11 items-center gap-2 rounded-sm border px-3 py-2 text-sm font-semibold",
+            gps.sharing ? "border-ok bg-ok-soft text-ok" : "border-chrome-line text-chrome-ink hover:bg-chrome-soft",
           )}
         >
           {gps.sharing ? <LocateFixed className="h-4 w-4" /> : <LocateOff className="h-4 w-4" />}
           {gps.sharing ? "GPS ativo" : "Compartilhar GPS"}
         </button>
-        <span className={cn("label-caps inline-flex items-center gap-1 rounded-sm border px-2 py-1", connected ? "border-accent/40 text-white" : "border-alert/50 bg-alert/20 text-white")}>
+        <span className={cn("label-caps inline-flex items-center gap-1 rounded-sm border px-2 py-1", connected ? "border-ok/40 bg-ok-soft text-ok" : "border-alert/50 bg-alert-soft text-alert")}>
           <Radio className="h-3.5 w-3.5" />
           {connected ? "Online" : "Offline"}
         </span>
@@ -195,7 +197,12 @@ function VehicleTerminal({ vehicleId }: { vehicleId: string }) {
       )}
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-3 py-4 sm:px-4">
-        {!current && !open.loading && (
+        {vehicle.error && <ErrorBox message={`Não foi possível atualizar a viatura. ${vehicle.error}`} onRetry={vehicle.reload} />}
+        {open.loading && !open.data && <LoadingBlock label="Consultando o empenho da viatura…" />}
+        {open.error && <ErrorBox message={`Não foi possível atualizar o empenho. ${open.error}${current ? " O último despacho carregado permanece visível." : ""}`} onRetry={open.reload} />}
+        {current && occurrence.loading && !occurrence.data && <LoadingBlock label="Carregando detalhes e rota da ocorrência…" />}
+        {current && occurrence.error && <ErrorBox message={`Detalhes da ocorrência: ${occurrence.error}`} onRetry={occurrence.reload} />}
+        {!current && open.data && !open.loading && !open.error && (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-sm border border-dashed border-line-strong bg-surface px-6 py-16 text-center">
             <Crosshair className="h-10 w-10 text-ink-soft" />
             <p className="text-xl font-semibold text-ink">Sem empenho no momento</p>
@@ -237,7 +244,7 @@ function VehicleTerminal({ vehicleId }: { vehicleId: string }) {
                       "min-h-16 rounded-sm border text-xl font-semibold transition-colors disabled:opacity-50",
                       status === "CANCELADO"
                         ? "border-line-strong bg-surface text-ink-muted hover:bg-surface-muted"
-                        : "border-accent bg-accent text-white hover:bg-accent-strong",
+                        : "border-action bg-action text-white hover:bg-action-hover",
                     )}
                   >
                     {ACTION_LABEL[status]}
@@ -249,6 +256,10 @@ function VehicleTerminal({ vehicleId }: { vehicleId: string }) {
             <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
               <RouteMap
                 route={route?.geometry ?? null}
+                routeSegments={route?.segments}
+                routeSteps={route?.steps}
+                routeSeconds={route?.estimated_time_seconds}
+                criticalMode={route?.algorithm === 'CRITICAL'}
                 pin={!route && detail ? { latitude: toNumber(detail.latitude) ?? 0, longitude: toNumber(detail.longitude) ?? 0, label: "Ocorrência" } : null}
                 originLabel={vehicle.data.prefix}
                 livePosition={livePosition ? { latitude: livePosition[0], longitude: livePosition[1], label: `${vehicle.data.prefix} agora` } : null}
@@ -295,7 +306,7 @@ function VehicleTerminal({ vehicleId }: { vehicleId: string }) {
                   </button>
                 ))}
               </div>
-              {noted && <p className="text-sm text-ok">Registrado na linha do tempo: “{noted}”.</p>}
+              {noted && <p role="status" className="text-sm text-ok">Registrado na linha do tempo: “{noted}”.</p>}
               {note.error && <ErrorBox message={note.error} />}
             </section>
           </>
@@ -313,13 +324,15 @@ function NearbyForCrew({ occurrenceId }: { occurrenceId: string }) {
     <div className="flex flex-col gap-3 rounded-sm border border-line bg-surface p-3 text-sm">
       <div>
         <p className="label-caps mb-1 flex items-center gap-1.5 text-ink-muted"><Droplets className="h-4 w-4" /> Hidrantes</p>
+        {water.loading && !water.data && <p role="status" className="text-ink-muted">Consultando pontos de água…</p>}
+        {water.error && <p className="text-warn">Pontos de água indisponíveis no momento.</p>}
         {(water.data ?? []).map((source) => (
           <p key={source.id} className="flex justify-between gap-2">
             <span className="min-w-0 truncate text-ink">{source.code} · {source.address}</span>
             <span className={cn("shrink-0 tabular-nums", source.status === "INOPERANTE" ? "text-alert line-through" : "text-ink")}>{formatDistance(source.distance_meters ?? null)}</span>
           </p>
         ))}
-        {water.data?.length === 0 && <p className="text-ink-muted">Nenhum cadastrado.</p>}
+        {water.data?.length === 0 && !water.error && <p className="text-ink-muted">Nenhum cadastrado.</p>}
       </div>
       <div>
         <p className="label-caps mb-1 flex items-center gap-1.5 text-ink-muted"><Hospital className="h-4 w-4" /> Hospital mais rápido</p>
@@ -328,7 +341,7 @@ function NearbyForCrew({ occurrenceId }: { occurrenceId: string }) {
             <span className="min-w-0 truncate text-ink">{hospitals.data[0].name}</span>
             <span className="shrink-0 tabular-nums text-ink">{formatDuration(hospitals.data[0].eta_seconds)}</span>
           </p>
-        ) : <p className="text-ink-muted">{hospitals.error ? "Indisponível." : "Calculando..."}</p>}
+        ) : <p className="text-ink-muted">{hospitals.error ? "Hospitais indisponíveis no momento." : hospitals.loading ? "Calculando…" : "Nenhum hospital encontrado na região."}</p>}
       </div>
     </div>
   )

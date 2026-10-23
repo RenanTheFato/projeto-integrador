@@ -25,6 +25,8 @@ import { useResource } from "@/hooks/use-resource"
 import { formatDuration, toNumber } from "@/lib/format"
 import { stationsOf } from "@/lib/geo"
 import { cn } from "@/lib/utils"
+import { ExportButton } from "@/components/layout/export-button"
+import { statisticsReport } from "@/lib/report-builders"
 
 /** Presets, because nobody fights a calendar grid to ask for "last 90 days". */
 const PERIODS = [
@@ -353,11 +355,14 @@ export default function Estatisticas() {
       <PageHeader
         title="Estatísticas"
         subtitle="Onde as ocorrências acontecem, quando chegam e quanto tempo levam"
+        actions={<ExportButton title="estatísticas" description={`Resumo e distribuições por natureza, prioridade, situação, unidade e dia. Analisa as ${items.length.toLocaleString("pt-BR")} ocorrências do recorte selecionado; não inclui os detalhes individuais nem o livro de operações por quartel.`}
+          disabled={all.loading || Boolean(all.error) || !items.length}
+          createReport={() => statisticsReport(items, `${periodLabel}${from ? ` (desde ${new Date(from).toLocaleString("pt-BR")})` : ""} | Natureza: ${NATURE_LABEL[nature as OccurrenceNature] ?? "Todas"} | Situação: ${OCCURRENCE_STATUS_LABEL[status as OccurrenceStatus] ?? "Todas"} | Prioridade: ${PRIORITY_LABEL[priority as OccurrencePriority] ?? "Todas"}`)} />}
       />
 
       <nav className="statistics-nav" aria-label="Seções das estatísticas">
-        <a href="#estatisticas-territorio">Território</a>
         <a href="#estatisticas-demanda">Demanda e horários</a>
+        <a href="#estatisticas-territorio">Território</a>
         <a href="#estatisticas-perfil">Perfil dos chamados</a>
         {all.data?.operational && <a href="#estatisticas-operacao">Atuação operacional</a>}
       </nav>
@@ -452,7 +457,25 @@ export default function Estatisticas() {
         />
       </div>
 
-      <div id="estatisticas-territorio" className="statistics-section-heading"><span>01 / TERRITÓRIO</span><p>Concentração, distribuição e recorrência das ocorrências</p></div>
+      <div id="estatisticas-demanda" className="statistics-section-heading"><span>01 / DEMANDA</span><p>Volume e distribuição dos chamados no tempo</p></div>
+      <div className="statistics-demand-grid">
+        <Panel className="statistics-volume" title="Volume ao longo do tempo" icon={<TrendingUp className="h-5 w-5" />}>
+          <TimeSeries
+            current={series}
+            previous={comparable && earlierSeries.length === series.length ? earlierSeries : undefined}
+            currentLabel={periodLabel}
+            previousLabel="Período anterior"
+          />
+        </Panel>
+        <Panel className="statistics-hours" title="Ocorrências por hora" icon={<Clock className="h-5 w-5" />}>
+          <HourHistogram counts={byHour} />
+        </Panel>
+        <Panel className="statistics-week" title="Distribuição semanal" icon={<CalendarRange className="h-5 w-5" />}>
+          <HeatGrid rows={WEEKDAYS} values={byWeekdayHour} />
+        </Panel>
+      </div>
+
+      <div id="estatisticas-territorio" className="statistics-section-heading"><span>02 / TERRITÓRIO</span><p>Concentração, distribuição e recorrência das ocorrências</p></div>
       <Panel
         title="Mapa das ocorrências"
         icon={<MapPinned className="h-5 w-5" />}
@@ -487,31 +510,12 @@ export default function Estatisticas() {
           mode={mapMode}
           onModeChange={setMapMode}
           onOpen={(id) => navigate(`/ocorrencias/${id}`)}
-          className="h-[58vh] max-h-[700px] min-h-[380px] w-full"
+          className="h-[48vh] max-h-[560px] min-h-[340px] w-full"
         />
 
         <p className="text-sm text-ink-muted">
           {MAP_NOTE[mapMode]} Os quartéis aparecem nos quatro modos.
         </p>
-      </Panel>
-
-      <div id="estatisticas-demanda" className="statistics-section-heading"><span>02 / DEMANDA</span><p>Volume e distribuição dos chamados no tempo</p></div>
-
-      <Panel title="Volume ao longo do tempo" icon={<TrendingUp className="h-5 w-5" />}>
-        <TimeSeries
-          current={series}
-          previous={comparable && earlierSeries.length === series.length ? earlierSeries : undefined}
-          currentLabel={periodLabel}
-          previousLabel="Período anterior"
-        />
-      </Panel>
-
-      <Panel title="Quando os chamados chegam" icon={<Clock className="h-5 w-5" />}>
-        <div className="statistics-time-grid">
-          <HeatGrid rows={WEEKDAYS} values={byWeekdayHour} />
-          <HourHistogram counts={byHour} />
-        </div>
-        <p className="statistics-footnote">Cada célula cruza um dia da semana com uma hora de abertura. As barras acumulam os chamados por hora em todo o recorte.</p>
       </Panel>
 
       <div id="estatisticas-perfil" className="statistics-section-heading"><span>03 / PERFIL DOS CHAMADOS</span><p>Natureza, localização e tempo de resposta</p></div>

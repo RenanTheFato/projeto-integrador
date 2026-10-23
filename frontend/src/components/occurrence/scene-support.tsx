@@ -75,9 +75,10 @@ export function SceneSupport({ occurrence }: { occurrence: Occurrence }) {
   const waterBlock = (
     <section className="flex flex-col gap-2" aria-label="Pontos de água próximos">
       <p className="label-caps flex items-center gap-1.5 text-ink-muted"><Droplets className="h-4 w-4" /> Pontos de água próximos</p>
-      {water.data && water.data.length === 0 && <p className="text-sm text-ink-muted">Nenhum ponto de água cadastrado.</p>}
+      {water.loading && !water.data && <p role="status" className="text-sm text-ink-muted">Consultando pontos de água próximos…</p>}
+      {water.data && !water.error && water.data.length === 0 && <p className="text-sm text-ink-muted">Nenhum ponto de água cadastrado.</p>}
       {water.error && <p className="text-sm text-ink-muted">Cadastro de hidrantes indisponível.</p>}
-      <ul className="flex flex-col divide-y divide-line rounded-sm border border-line">
+      {(water.data?.length ?? 0) > 0 && <ul className="flex flex-col divide-y divide-line rounded-sm border border-line">
         {(water.data ?? []).map((source) => (
           <li key={source.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
             <span className="min-w-0">
@@ -91,7 +92,7 @@ export function SceneSupport({ occurrence }: { occurrence: Occurrence }) {
             </span>
           </li>
         ))}
-      </ul>
+      </ul>}
     </section>
   )
 
@@ -99,8 +100,9 @@ export function SceneSupport({ occurrence }: { occurrence: Occurrence }) {
     <section className="flex flex-col gap-2" aria-label="Hospitais">
       <p className="label-caps flex items-center gap-1.5 text-ink-muted"><Hospital className="h-4 w-4" /> Destino de vítimas</p>
       {hospitals.error && <p className="text-sm text-ink-muted">Lista de hospitais indisponível.</p>}
-      {!hospitals.data && !hospitals.error && <p className="text-sm text-ink-muted">Calculando tempos até os hospitais...</p>}
-      <ul className="flex flex-col divide-y divide-line rounded-sm border border-line">
+      {hospitals.loading && !hospitals.data && <p role="status" className="text-sm text-ink-muted">Calculando tempos até os hospitais...</p>}
+      {hospitals.data && !hospitals.error && hospitals.data.length === 0 && <p className="text-sm text-ink-muted">Nenhum hospital encontrado na região.</p>}
+      {(hospitals.data?.length ?? 0) > 0 && <ul className="flex flex-col divide-y divide-line rounded-sm border border-line">
         {(hospitals.data ?? []).slice(0, 3).map((hospital) => (
           <li key={hospital.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
             <span className="min-w-0 text-ink">
@@ -113,7 +115,7 @@ export function SceneSupport({ occurrence }: { occurrence: Occurrence }) {
             </span>
           </li>
         ))}
-      </ul>
+      </ul>}
       <p className="text-xs text-ink-soft">Tempo de ida a partir da ocorrência, pela rede neural. Fonte: OpenStreetMap.</p>
     </section>
   )

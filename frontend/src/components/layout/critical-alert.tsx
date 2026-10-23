@@ -16,6 +16,11 @@ import { NATURE_LABEL, PRIORITY_LABEL } from "@/api/labels"
 import type { OccurrenceNature, OccurrencePriority } from "@/api/types"
 import { useRealtime } from "@/hooks/use-realtime"
 import { cn } from "@/lib/utils"
+import { occurrences } from '@/api/endpoints'
+import { useResource } from '@/hooks/use-resource'
+import { useOperationClock } from '@/components/operational/use-operation-clock'
+import { ageLabel } from '@/components/operational/operation-state'
+import '@/components/operational/operational.css'
 
 const MUTE_KEY = "zeno.alerts.muted"
 const ALERTING: string[] = ["CRITICA", "ALTA"]
@@ -25,10 +30,10 @@ const ALERTING: string[] = ["CRITICA", "ALTA"]
 const muteListeners = new Set<() => void>()
 
 function readMuted(): boolean {
-  try { return window.localStorage.getItem(MUTE_KEY) === "1" } catch { return false }
+  try { return window.localStorage.getItem(MUTE_KEY) !== "0" } catch { return true }
 }
 
-let muted = typeof window === "undefined" ? false : readMuted()
+let muted = typeof window === "undefined" ? true : readMuted()
 
 function setMuted(value: boolean) {
   muted = value
@@ -132,16 +137,12 @@ export function CriticalAlerts() {
     }
   }, []))
 
-  // The tab title blinks while an alert is pending, for a console in the background.
+  // A persistent title cue works without flashing in an unattended tab.
   useEffect(() => {
     if (alerts.length === 0) return
     const original = document.title
-    let on = false
-    const timer = window.setInterval(() => {
-      on = !on
-      document.title = on ? `● ${alerts.length} ocorrência(s) urgente(s)` : original
-    }, 1000)
-    return () => { window.clearInterval(timer); document.title = original }
+    document.title = `● ${alerts.length} ocorrência(s) urgente(s)`
+    return () => { document.title = original }
   }, [alerts.length])
 
   if (alerts.length === 0) return null
@@ -155,11 +156,11 @@ export function CriticalAlerts() {
           key={alert.id}
           role="alert"
           className={cn(
-            "pointer-events-auto flex w-full max-w-2xl items-center gap-3 rounded-sm border bg-surface px-4 py-3 shadow-2xl",
+            "op-critical-banner pointer-events-auto flex w-full max-w-2xl items-center gap-3 rounded-sm border bg-surface px-4 py-3 shadow-2xl",
             alert.priority === "CRITICA" ? "border-alert" : "border-warn",
           )}
         >
-          <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-white", alert.priority === "CRITICA" ? "bg-alert" : "bg-warn")}>
+          <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-sm", alert.priority === "CRITICA" ? "bg-alert-soft text-alert" : "bg-warn-soft text-warn")}>
             <Siren className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
@@ -167,11 +168,12 @@ export function CriticalAlerts() {
               {NATURE_LABEL[alert.nature]} · prioridade {PRIORITY_LABEL[alert.priority].toLowerCase()}
             </p>
             <p className="truncate text-sm text-ink-muted">{alert.protocol} · {alert.address}</p>
+            <AlertAge id={alert.id} />
           </div>
           <Link
             to={`/ocorrencias/${alert.id}`}
             onClick={() => dismiss(alert.id)}
-            className="shrink-0 rounded-sm border border-accent bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-accent-strong"
+            className="shrink-0 rounded-sm border border-action bg-action px-3 py-1.5 text-sm font-semibold text-white hover:bg-action-hover"
           >
             Abrir
           </Link>
@@ -183,4 +185,10 @@ export function CriticalAlerts() {
       {isMuted && <p className="pointer-events-auto rounded-sm bg-chrome px-2 py-0.5 text-xs text-chrome-muted">Som desligado</p>}
     </div>
   )
+}
+
+function AlertAge({ id }: { id: string }) {
+  const detail = useResource(() => occurrences.get(id), [id])
+  const now = useOperationClock()
+  return detail.data ? <time dateTime={detail.data.opened_at}>Aberta há {ageLabel(detail.data.opened_at, now)}</time> : null
 }
