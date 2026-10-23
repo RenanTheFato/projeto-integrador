@@ -20,6 +20,9 @@ import { EmptyState, ErrorBox, LoadingBlock } from "@/components/layout/feedback
 import {
   ConvergenceSpeed, EpochsVsQuality, LossCurve, RunComparison,
 } from "@/components/charts/training-charts"
+import { NeuralExplanation } from "@/components/mapa/neural-explanation"
+import { NeuralStreetsMap } from "@/components/mapa/neural-streets-map"
+import { useVisualMotion } from "@/hooks/use-visual-motion"
 import { EtaAccuracyChart } from "@/components/charts/eta-accuracy"
 import { useMutation, useResource } from "@/hooks/use-resource"
 import { formatDateTime, formatLoss } from "@/lib/format"
@@ -32,16 +35,21 @@ export default function RedeNeural() {
   const [page, setPage] = useState(1)
   const [epochs, setEpochs] = useState("800")
   const [watching, setWatching] = useState<string | null>(null)
+  const [showStreets, setShowStreets] = useState(false)
+  const motion = useVisualMotion()
 
   const model = useResource(() => ai.model(), [])
   const eta = useResource(() => ai.etaAccuracy(), [])
   const history = useResource(() => ai.listTrainings({ page, per_page: 10 }), [page])
   const start = useMutation((value: number) => ai.startTraining(value))
 
+  const watchedId = watching ?? history.data?.items.find(run => run.status === "EXECUTANDO" || run.status === "PENDENTE")?.id ?? null
+  const streets = useResource(() => ai.edgeCosts(), [model.data?.model_version], { enabled: Boolean(model.data?.loaded) })
+
   const live = useResource(
-    () => ai.getTraining(watching as string),
-    [watching],
-    { enabled: Boolean(watching) },
+    () => ai.getTraining(watchedId as string),
+    [watchedId],
+    { enabled: Boolean(watchedId) },
   )
 
   // A run takes minutes; the backend mirrors the Python job into Postgres and
@@ -50,7 +58,7 @@ export default function RedeNeural() {
   const liveStatus = live.data?.status
 
   useEffect(() => {
-    if (!watching) return
+    if (!watchedId || !motion.visible) return
     if (liveStatus === "CONCLUIDO" || liveStatus === "FALHOU") {
       history.reload()
       model.reload()
@@ -60,14 +68,14 @@ export default function RedeNeural() {
     const timer = window.setInterval(liveReload, 4000)
     return () => window.clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watching, liveStatus, liveReload])
+  }, [watchedId, liveStatus, liveReload, motion.visible])
 
   const runs = history.data?.items ?? []
 
   // The charts follow the table: clicking a row watches that run, and what is
   // watched is what is drawn. With nothing picked, the newest run is the one
   // anybody opening this screen wants to see.
-  const selectedRun = live.data ?? runs[0] ?? null
+  const selectedRun = (live.data?.id === watchedId ? live.data : runs.find(run => run.id === watchedId)) ?? runs[0] ?? null
 
   async function handleStart() {
     const run = await start.run(Number(epochs))
@@ -78,14 +86,31 @@ export default function RedeNeural() {
   }
 
   return (
-    <Page>
+    <div className="neural-page"><Page>
       <PageHeader
         title="IA"
         subtitle="Estado do modelo de IA que pondera as ruas e histórico de treinamentos"
       />
 
-      <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
-        <Panel title="Modelo carregado" icon={<Brain className="h-5 w-5" />}>
+      <div className="neural-lead-grid">
+        <div className="neural-curve">
+          {history.loading && !history.data && <LoadingBlock label="Carregando o histórico..." />}
+          {history.error && <ErrorBox message={history.error} onRetry={history.reload} />}
+          {selectedRun ? <>
+            <div className="neural-run-heading">
+              <div>
+                <p className="label-caps text-ink-soft">Treinamento em análise</p>
+                <p className="mt-1 font-semibold text-ink">{formatDateTime(selectedRun.started_at ?? selectedRun.created_at)}</p>
+                {selectedRun.model_path?.startsWith("demo://") && <p className="mt-1 text-sm text-warn">Demonstração · métricas simuladas</p>}
+              </div>
+              <Badge tone={TRAINING_STATUS_TONE[selectedRun.status]}>{TRAINING_STATUS_LABEL[selectedRun.status]}</Badge>
+            </div>
+            <LossCurve key={selectedRun.id} run={selectedRun} previous={runs} />
+          </> : !history.loading && !history.error && <EmptyState title="Nenhum treinamento registrado" />}
+        </div>
+
+        <div className="neural-controls">
+        <Panel className="neural-model" title="Estado do modelo" icon={<Brain className="h-5 w-5" />}>
           {model.loading && <LoadingBlock label="Consultando o serviço de IA..." />}
           {model.error && <ErrorBox message={model.error} onRetry={model.reload} />}
 
@@ -109,6 +134,13 @@ export default function RedeNeural() {
               </div>
             </div>
           )}
+        </Panel>
+
+        <Panel title="Como a IA pensa" icon={<Brain className="h-5 w-5" />}>
+          {streets.loading && !streets.data && <LoadingBlock label="Lendo ruas e pesos do modelo…" />}
+          {streets.error && <ErrorBox message={streets.error} onRetry={streets.reload} />}
+          {streets.data && <NeuralExplanation key={streets.data.model_version} data={streets.data} />}
+          {!model.loading && !model.data?.loaded && <p className="text-sm text-ink-muted">A explicação aguarda um modelo carregado.</p>}
         </Panel>
 
         <Panel title="Treinar o modelo" icon={<Play className="h-5 w-5" />}>
@@ -152,10 +184,24 @@ export default function RedeNeural() {
               progresso a cada 50, então corridas muito curtas terminam sem nenhuma medição.
             </p>
 
-            {watching && live.data && <LiveRun run={live.data} />}
+            {watchedId && live.data?.id === watchedId && <LiveRun run={live.data} />}
           </div>
         </Panel>
+
+        </div>
       </div>
+
+      <Panel title="Visão da IA nas ruas" icon={<Brain className="h-5 w-5" />}>
+        <ActionButton onClick={() => setShowStreets(value => !value)} aria-expanded={showStreets} aria-controls="neural-street-view">
+          {showStreets ? "Fechar mapa de custos" : "Abrir mapa de custos e busca"}
+        </ActionButton>
+        {showStreets && <div id="neural-street-view" className="mt-4">
+          {streets.loading && !streets.data && <LoadingBlock label="Carregando custos previstos…" />}
+          {streets.error && <ErrorBox message={streets.error} onRetry={streets.reload} />}
+          {streets.data && <NeuralStreetsMap key={streets.data.model_version} data={streets.data} />}
+          {!model.loading && !model.data?.loaded && <p className="text-sm text-ink-muted">Carregue o modelo para consultar as ruas.</p>}
+        </div>}
+      </Panel>
 
       <Panel title="Evolução dos treinamentos" icon={<ChartLine className="h-5 w-5" />}>
         {history.loading && !history.data && <LoadingBlock label="Carregando o histórico..." />}
@@ -168,21 +214,12 @@ export default function RedeNeural() {
 
         {selectedRun && (
           <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-info bg-surface-muted px-4 py-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Treinamento em análise</p>
-                <p className="mt-1 font-semibold text-ink">{formatDateTime(selectedRun.started_at ?? selectedRun.created_at)}</p>
-                {selectedRun.model_path?.startsWith("demo://") && <p className="text-sm text-warn">Demonstração · métricas simuladas</p>}
-              </div>
-              <Badge tone={TRAINING_STATUS_TONE[selectedRun.status]}>{TRAINING_STATUS_LABEL[selectedRun.status]}</Badge>
-            </div>
             <div className="grid grid-cols-2 gap-px border border-line bg-line lg:grid-cols-4">
               <Figure label="Melhor validação" value={formatLoss(selectedRun.best_validation_loss ?? selectedRun.validation_loss)} />
               <Figure label="Loss de treino" value={formatLoss(selectedRun.train_loss)} />
               <Figure label="Épocas solicitadas" value={selectedRun.epochs.toLocaleString("pt-BR")} />
               <Figure label="Meta de validação" value={formatLoss(GOOD_VALIDATION_LOSS)} />
             </div>
-            <LossCurve key={selectedRun.id} run={selectedRun} previous={runs} />
             <div className="grid min-w-0 gap-4 xl:grid-cols-2">
 
             <RunComparison
@@ -266,13 +303,13 @@ export default function RedeNeural() {
           </>
         )}
       </Panel>
-    </Page>
+    </Page></div>
   )
 }
 
 function Figure({ label, value }: { label: string, value: string }) {
   return (
-    <div className="min-w-0 bg-surface px-4 py-3">
+    <div className="neural-figure min-w-0 bg-surface px-4 py-3">
       <p className="text-sm text-ink-muted">{label}</p>
       <p className="text-2xl font-semibold text-ink">{value}</p>
     </div>
@@ -328,6 +365,7 @@ function LiveRun({ run }: { run: TrainingRun }) {
  */
 function EpochProgress({ run }: { run: TrainingRun }) {
   const done = run.status === "CONCLUIDO" || run.status === "FALHOU"
+  const motion = useVisualMotion()
   const reached = run.current_epoch ?? 0
   const percent = run.epochs > 0 ? Math.min(100, (reached / run.epochs) * 100) : 0
 
@@ -346,8 +384,8 @@ function EpochProgress({ run }: { run: TrainingRun }) {
 
       <div className="h-2.5 w-full border border-line bg-surface">
         <div
-          className={`h-full transition-[width] duration-500 ${done ? "bg-ok" : "bg-accent"}`}
-          style={{ width: `${percent}%` }}
+          className={`h-full w-full origin-left ${done ? "bg-ok" : "bg-accent"}`}
+          style={{ transform: `scaleX(${percent / 100})`, transition: motion.animate ? "transform 500ms ease-out" : "none" }}
         />
       </div>
     </div>

@@ -25,10 +25,11 @@ import { Flame, Layers, MapPin, Maximize, Minimize, Repeat, LocateFixed } from "
 import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 
-import type { GraphBounds, OccurrencePriority } from "@/api/types"
+import type { Dispatch, GraphBounds, OccurrencePriority } from "@/api/types"
+import { OperationMapControls } from "@/components/operational/operation-map-controls"
 import { NATURE_LABEL, PRIORITY_LABEL } from "@/api/labels"
 import { PRIORITY_COLOR } from "./constants/incident-palette"
-import { STYLE } from "./constants/constants"
+import { mapStyle } from "./constants/constants"
 import { fitBoundsOf, observeMapToolbar } from "./map/helpers"
 import { set3DEnvironment, setBuildingLayersVisibility } from "./map/layers"
 import { createStationMarker } from "./map/markers"
@@ -99,6 +100,12 @@ export interface IncidentMapProps {
   onOpen?: (id: string) => void
   /** Live vehicle positions, drawn as prefix chips (the wallboard's fleet). */
   vehicles?: LiveVehicle[]
+  unlocatedVehicles?: string[]
+  dispatches?: Dispatch[]
+  operational?: boolean
+  wallboard?: boolean
+  historicalAt?: number
+  replayTrails?: GeoJSON.FeatureCollection
   className?: string
 }
 
@@ -145,7 +152,8 @@ const MODES: { value: IncidentMapMode, label: string, Icon: React.ElementType, t
 ]
 
 export default function IncidentMap({
-  incidents, clusters, stations, coverage, mode, onModeChange, onOpen, vehicles, className,
+  incidents, clusters, stations, coverage, mode, onModeChange, onOpen, vehicles, unlocatedVehicles, className,
+  dispatches, operational = false, wallboard, historicalAt, replayTrails,
 }: IncidentMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -156,6 +164,8 @@ export default function IncidentMap({
   const vehicleMarkers = useRef(new Map<string, maplibregl.Marker>())
 
   const [ready, setReady] = useState(false)
+  const [operationalMap, setOperationalMap] = useState<maplibregl.Map | null>(null)
+  const [heatTime, setHeatTime] = useState<number | null>(null)
   const [loadingSlow, setLoadingSlow] = useState(false)
   const [view, setView] = useState<View>("inline")
   const [selectedUnit, setSelectedUnit] = useState("")
@@ -163,7 +173,11 @@ export default function IncidentMap({
   const respondingUnits = useMemo(() => [...new Set(incidents.map((point) => point.unitLabel))].sort(), [incidents])
   const activeUnit = respondingUnits.includes(selectedUnit) ? selectedUnit : ""
 
-  const data = useMemo(() => featuresOf(incidents), [incidents])
+  const filteredIncidents = useMemo(() => mode === 'heat' && heatTime !== null ? incidents.filter((point) => {
+    const opened = Date.parse(point.openedAt)
+    return opened >= heatTime - 3600000 && opened < heatTime
+  }) : incidents, [incidents, mode, heatTime])
+  const data = useMemo(() => featuresOf(filteredIncidents), [filteredIncidents])
   const clusterData = useMemo(() => clusterFeatures(clusters ?? []), [clusters])
 
   const dataRef = useRef(data)
@@ -182,7 +196,7 @@ export default function IncidentMap({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: STYLE,
+      style: mapStyle(),
       center: FALLBACK_CENTER,
       zoom: 11.5,
       pitch: 0,
@@ -463,6 +477,7 @@ export default function IncidentMap({
       if (coverageRef.current) fitBoundsOf(map, coverageRef.current)
 
       setReady(true)
+      setOperationalMap(map)
     })
 
     const openPopup = (
@@ -479,7 +494,7 @@ export default function IncidentMap({
       // Built as DOM rather than an HTML string: the protocol and the address
       // are user input and must never be parsed as markup.
       const node = document.createElement("div")
-      node.style.cssText = "font:13px/1.45 system-ui,sans-serif;color:#0F1922;min-width:190px"
+      node.style.cssText = "font:13px/1.45 system-ui,sans-serif;color:var(--map-ink);min-width:190px"
 
       if (kind === "cluster") {
         const count = document.createElement("p")
@@ -487,7 +502,7 @@ export default function IncidentMap({
         count.textContent = `${properties.count} ocorrências neste endereço`
 
         const label = document.createElement("p")
-        label.style.cssText = "margin:0;color:#55636F"
+        label.style.cssText = "margin:0;color:var(--map-muted)"
         label.textContent = properties.label
 
         node.append(count, label)
@@ -502,17 +517,17 @@ export default function IncidentMap({
           ?? properties.nature
 
         const address = document.createElement("p")
-        address.style.cssText = "margin:0;color:#55636F"
+        address.style.cssText = "margin:0;color:var(--map-muted)"
         address.textContent = properties.address
 
         const meta = document.createElement("p")
         meta.style.cssText = "margin:4px 0 0;font-weight:600"
-        meta.style.color = PRIORITY_COLOR[properties.priority as OccurrencePriority] ?? "#55636F"
+        meta.style.color = PRIORITY_COLOR[properties.priority as OccurrencePriority] ?? "var(--map-muted)"
         meta.textContent =
           `Prioridade ${PRIORITY_LABEL[properties.priority as OccurrencePriority] ?? "—"}`
 
         const unit = document.createElement("p")
-        unit.style.cssText = "margin:0;color:#55636F"
+        unit.style.cssText = "margin:0;color:var(--map-muted)"
         unit.textContent = `Posto responsável: ${properties.unitLabel}`
 
         node.append(protocol, nature, address, meta, unit)
@@ -521,7 +536,7 @@ export default function IncidentMap({
           const button = document.createElement("button")
           button.type = "button"
           button.style.cssText =
-            "margin-top:8px;font-weight:700;color:#0B63A5;text-decoration:underline;"
+            "margin-top:8px;font-weight:700;color:var(--color-accent);text-decoration:underline;"
             + "cursor:pointer;background:none;border:none;padding:0"
           button.textContent = "Abrir a ocorrência"
           button.addEventListener("click", () => openRef.current?.(properties.id))
@@ -539,8 +554,32 @@ export default function IncidentMap({
       const feature = event.features?.[0]
       if (!feature || feature.geometry.type !== "Point") return
       const source = map.getSource(SPATIAL_SOURCE) as maplibregl.GeoJSONSource
-      const zoom = await source.getClusterExpansionZoom(Number(feature.properties.cluster_id))
-      if (mapRef.current === map) map.easeTo({ center: feature.geometry.coordinates as Coordinate, zoom })
+      const id = Number(feature.properties.cluster_id)
+      try {
+        const [zoom, leaves] = await Promise.all([source.getClusterExpansionZoom(id), source.getClusterLeaves(id, 50, 0)])
+        if (mapRef.current !== map) return
+        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        map.easeTo({ center: feature.geometry.coordinates as Coordinate, zoom, duration: reduced ? 0 : 300 })
+        if (reduced || document.hidden) return
+        map.once('moveend', () => {
+          if (mapRef.current !== map || feature.geometry.type !== 'Point') return
+          const origin = map.project(feature.geometry.coordinates as Coordinate)
+          const children = leaves.flatMap((leaf) => {
+            if (leaf.geometry.type !== 'Point') return []
+            const target = map.project(leaf.geometry.coordinates as Coordinate)
+            const element = document.createElement('div')
+            const dot = document.createElement('div'); dot.className = 'op-cluster-child'
+            dot.style.setProperty('--op-from-x', `${origin.x - target.x}px`)
+            dot.style.setProperty('--op-from-y', `${origin.y - target.y}px`)
+            dot.style.setProperty('--op-priority', PRIORITY_COLOR[leaf.properties?.priority as OccurrencePriority] ?? '#24668c')
+            element.append(dot)
+            return [new maplibregl.Marker({ element }).setLngLat(leaf.geometry.coordinates as Coordinate).addTo(map)]
+          })
+          const clear = () => children.forEach((marker) => marker.remove())
+          const timer = window.setTimeout(clear, 320)
+          map.once('remove', () => { clearTimeout(timer); clear() })
+        })
+      } catch { /* A source replacement can invalidate a cluster between click and expansion. */ }
     })
     map.on("click", POINT_LAYER, (event) => openPopup(event, "incident"))
     map.on("click", UNIT_LAYER, (event) => openPopup(event, "incident"))
@@ -561,6 +600,7 @@ export default function IncidentMap({
       fleetMarkers.forEach((marker) => marker.remove())
       fleetMarkers.clear()
       setReady(false)
+      setOperationalMap(null)
       map.remove()
       mapRef.current = null
       hasFramedIncidents.current = false
@@ -666,8 +706,8 @@ export default function IncidentMap({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !ready) return
-    syncVehicleMarkers(map, vehicleMarkers.current, vehicles ?? [])
-  }, [vehicles, ready])
+    syncVehicleMarkers(map, vehicleMarkers.current, vehicles ?? [], historicalAt)
+  }, [vehicles, ready, historicalAt])
 
   // -- size ------------------------------------------------------------------
 
@@ -713,6 +753,8 @@ export default function IncidentMap({
   return (
     <div ref={wrapRef} className={cn("map-wrap incident-map border", className)}>
       <div ref={containerRef} className="map" />
+      {operational && operationalMap && <OperationMapControls map={operationalMap} incidents={incidents} vehicles={vehicles} dispatches={dispatches} stations={stations} mode={mode} onModeChange={onModeChange} onHeatTime={setHeatTime} wallboard={wallboard} historical={historicalAt !== undefined} replayTrails={replayTrails} />}
+      {!!unlocatedVehicles?.length && <details className="map-no-signal"><summary>Sem posição · {unlocatedVehicles.length}</summary><p>{unlocatedVehicles.join(' · ')}</p></details>}
 
       <div ref={toolbarRef} className="top-controls">
         <div className="map-toolbar-title"><span>ANÁLISE TERRITORIAL</span><strong>{modeMeta?.title}</strong></div>

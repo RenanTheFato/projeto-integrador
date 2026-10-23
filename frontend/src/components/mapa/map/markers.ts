@@ -9,6 +9,10 @@ import maplibregl from "maplibre-gl"
 import type { CustomLayerInterface, CustomRenderMethodInput } from "maplibre-gl"
 import * as THREE from "three"
 
+import type { OccurrenceNature } from "../../../api/types"
+import { createArrivalScene, updateArrivalScene, disposeArrivalScene } from "./arrival-scenes"
+import type { VehicleModelOptions } from "./vehicle-models"
+import { sunPosition } from "./environment"
 import type { LngLat } from "@/components/mapa/routes/utils"
 import { createFireTruckModel, disposeFireTruckModel, updateFireTruckSignals } from "./firetruck-3d"
 
@@ -115,6 +119,11 @@ interface VehicleState {
   visible: boolean
   lateralOffsetMeters: number
   movedAt: number
+  ghost?: boolean
+  distanceMeters: number
+  visual?: Partial<VehicleModelOptions>
+  arrival?: { nature: OccurrenceNature; seconds: number; characters: boolean }
+  visualKey?: string
 }
 
 interface VehicleRegistry {
@@ -125,6 +134,7 @@ interface VehicleRegistry {
 }
 
 const vehicleStates = new WeakMap<maplibregl.Map, VehicleRegistry>()
+const visualOptions = new WeakMap<maplibregl.Map, Partial<VehicleModelOptions>>()
 const renderers = new WeakMap<maplibregl.Map, { renderer: THREE.WebGLRenderer; users: number }>()
 
 function registryFor(map: maplibregl.Map): VehicleRegistry {
@@ -147,6 +157,8 @@ function vehicleState(map: maplibregl.Map, start: LngLat, variant: VehicleVarian
     visible: false,
     lateralOffsetMeters: 0,
     movedAt: -Infinity,
+    distanceMeters: 0,
+    visual: visualOptions.get(map),
   }
   registry[variant] = state
   return state
@@ -170,6 +182,13 @@ class FireTruckNavigationLayer implements CustomLayerInterface {
   private readonly rotation = new THREE.Matrix4()
   private readonly translation = new THREE.Matrix4()
   private readonly scaleVector = new THREE.Vector3()
+  private arrival: THREE.Group | null = null
+  private arrivalKey = ""
+  private previousTime: number | null = null
+  private previousDistance = 0
+  private previousBearing = 0
+  private previousSpeed = 0
+  private visualKey = ""
   private motionPreference: MediaQueryList | null = null
   private readonly onMotionChange = () => this.map?.triggerRepaint()
 
@@ -189,7 +208,9 @@ class FireTruckNavigationLayer implements CustomLayerInterface {
         : this.variant === "comparisonAi"
           ? "ai"
           : "distance",
+      this.state.visual,
     )
+    this.visualKey = JSON.stringify(this.state.visual ?? {})
     this.scene.add(this.truck)
 
     const sky = new THREE.HemisphereLight(0xeaf4ff, 0x29343a, 1.8)
@@ -218,11 +239,41 @@ class FireTruckNavigationLayer implements CustomLayerInterface {
   ) {
     if (!this.renderer || !this.truck || !this.state.visible) return
 
+    const key = JSON.stringify(this.state.visual ?? {})
+    if (key !== this.visualKey) {
+      this.scene.remove(this.truck); disposeFireTruckModel(this.truck)
+      this.truck = createFireTruckModel(this.variant === 'comparisonAi' ? 'ai' : this.variant === 'comparison' ? 'distance' : 'normal', this.state.visual)
+      this.scene.add(this.truck); this.visualKey = key
+    }
     const now = performance.now()
-    updateFireTruckSignals(this.truck, now / 1000, now - this.state.movedAt < 150, this.motionPreference?.matches ?? false)
+    const deltaSeconds = this.previousTime === null ? 0 : Math.min(.15, Math.max(0, (now - this.previousTime) / 1000))
+    const distanceMeters = Math.max(0, this.state.distanceMeters - this.previousDistance)
+    const speed = deltaSeconds > .001 ? distanceMeters / deltaSeconds : 0
+    const turnRate = deltaSeconds > .001 ? ((this.state.bearing - this.previousBearing + 540) % 360 - 180) / deltaSeconds : 0
+    const arrivalKey = this.state.arrival ? `${this.state.arrival.nature}:${this.state.arrival.characters}` : ''
+    if (this.arrival && this.arrivalKey !== arrivalKey) { this.scene.remove(this.arrival); disposeArrivalScene(this.arrival); this.arrival = null }
+    if (!this.arrival && this.state.arrival) { this.arrival = createArrivalScene(this.state.arrival.nature, { characters: this.state.arrival.characters }); this.scene.add(this.arrival); this.arrivalKey = arrivalKey }
+    if (this.arrival && this.state.arrival) updateArrivalScene(this.arrival, this.state.arrival.seconds, { reducedMotion: this.motionPreference?.matches })
+    const solar = sunPosition(new Date(), this.state.coords[1], this.state.coords[0])
+    updateFireTruckSignals(this.truck, now / 1000, now - this.state.movedAt < 150, this.motionPreference?.matches ?? false, {
+      deltaSeconds, distanceMeters, speedMps: speed, turnRate, arrived: !!this.state.arrival, braking: this.state.arrival ? this.state.arrival.seconds < 1 : speed < this.previousSpeed - .5, doors: (this.state.arrival?.seconds ?? 0) > .6, ladder: this.state.arrival?.nature === "CAPTURA_ANIMAL", night: solar.night, zoom: this.map?.getZoom?.() ?? 17,
+    })
+    this.previousTime = now; this.previousDistance = this.state.distanceMeters; this.previousBearing = this.state.bearing; this.previousSpeed = speed
+    if (this.truck.userData.ghost !== !!this.state.ghost) {
+      this.truck.userData.ghost = !!this.state.ghost
+      this.truck.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return
+        for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+          material.userData.originalOpacity ??= material.opacity
+          material.opacity = this.state.ghost ? Math.min(0.28, material.userData.originalOpacity) : material.userData.originalOpacity
+          material.transparent = material.opacity < 1
+          material.needsUpdate = true
+        }
+      })
+    }
     const mercator = maplibregl.MercatorCoordinate.fromLngLat(
       this.state.coords,
-      VEHICLE_ALTITUDE_METERS,
+      (this.map?.queryTerrainElevation(this.state.coords) ?? 0) + VEHICLE_ALTITUDE_METERS,
     )
     const scale = mercator.meterInMercatorCoordinateUnits() * VEHICLE_VISUAL_SCALE
     const bearing = THREE.MathUtils.degToRad(this.state.bearing)
@@ -256,6 +307,7 @@ class FireTruckNavigationLayer implements CustomLayerInterface {
       disposeFireTruckModel(this.truck)
       this.truck = null
     }
+    if (this.arrival) { disposeArrivalScene(this.arrival); this.arrival = null }
     this.scene.clear()
 
     const shared = this.map ? renderers.get(this.map) : undefined
@@ -279,6 +331,7 @@ function addVehicleLayer(map: maplibregl.Map, start: LngLat, variant: VehicleVar
   state.bearing = 0
   state.lateralOffsetMeters = 0
   state.movedAt = -Infinity
+  state.distanceMeters = 0
 
   if (!map.getLayer(id)) {
     map.addLayer(new FireTruckNavigationLayer(id, state, variant))
@@ -304,7 +357,11 @@ function moveVehicle(
   if (!state) return
 
   const changed = state.coords[0] !== coords[0] || state.coords[1] !== coords[1]
-  if (changed) state.movedAt = performance.now()
+  if (changed) {
+    const distance = Math.hypot((coords[0] - state.coords[0]) * Math.cos(coords[1] * Math.PI / 180), coords[1] - state.coords[1]) * 111320
+    if (distance < 150) state.distanceMeters += distance
+    state.movedAt = performance.now()
+  }
   const needsRepaint = changed || state.bearing !== bearing || state.lateralOffsetMeters !== lateralOffsetMeters
   state.coords = coords
   state.bearing = bearing
@@ -353,6 +410,11 @@ export function showComparisonVehicle(map: maplibregl.Map, visible: boolean) {
   showVehicle(map, "comparison", visible)
 }
 
+export function setVehicleGhost(map: maplibregl.Map, ghost: boolean) {
+  const state = registryFor(map).comparison
+  if (state) { state.ghost = ghost; map.triggerRepaint() }
+}
+
 export function moveComparisonVehicle(
   map: maplibregl.Map,
   coords: LngLat,
@@ -372,4 +434,19 @@ export function showCriticalVehicle(map: maplibregl.Map, visible: boolean) {
 
 export function moveCriticalVehicle(map: maplibregl.Map, coords: LngLat, bearing: number, offset = 0) {
   moveVehicle(map, "critical", coords, bearing, offset)
+}
+
+/** The same registered assembly and livery are used by navigation and the garage. */
+export function setMapVehicleVisual(map: maplibregl.Map, options?: Partial<VehicleModelOptions>) {
+  if (options) visualOptions.set(map, options)
+  else visualOptions.delete(map)
+  for (const state of Object.values(registryFor(map))) if (state) state.visual = options
+  map.triggerRepaint()
+}
+
+export function setArrivalFrame(map: maplibregl.Map, variant: VehicleVariant, nature: OccurrenceNature, seconds: number | null, characters = true) {
+  const state = registryFor(map)[variant]
+  if (!state) return
+  state.arrival = seconds === null ? undefined : { nature, seconds, characters }
+  map.triggerRepaint()
 }

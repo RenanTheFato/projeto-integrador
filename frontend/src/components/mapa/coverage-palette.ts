@@ -3,10 +3,10 @@
 import type { CoveragePoint } from "@/api/types"
 
 export const POINT_COLOR = {
-  covered: "#2F6A52",
-  late: "#B07A12",
-  outside: "#A32A20",
-  unknown: "#8496A5",
+  covered: "#7DC4A1",
+  late: "#E6BD70",
+  outside: "#EF8C87",
+  unknown: "#A5B6C5",
 }
 
 export function pointClass(point: Pick<CoveragePoint, "time_seconds">, targetMinutes: number, maxMinutes: number): keyof typeof POINT_COLOR {

@@ -6,47 +6,55 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 
-import { cumulative, pointAlong } from "@/lib/guidance"
 import type { LatLon } from "@/lib/guidance"
+import type { RouteSegment } from "@/api/types"
+import { measureRoute, toMapCoords } from "@/components/mapa/routes/utils"
 
-export function useRouteSimulation(geometry: LatLon[] | null, totalSeconds: number) {
-  const along = useMemo(() => cumulative(geometry ?? []), [geometry])
-  const total = along[along.length - 1] ?? 0
+export function useRouteSimulation(geometry: LatLon[] | null, totalSeconds: number, segments?: RouteSegment[] | null) {
+  const metrics = useMemo(() => measureRoute(toMapCoords(geometry), segments, totalSeconds), [geometry, segments, totalSeconds])
+  const total = metrics.totalMeters
 
   const [running, setRunning] = useState(false)
   const [speed, setSpeed] = useState(4)
-  const [meters, setMeters] = useState(0)
-  const metersRef = useRef(0)
+  const [clock, setClock] = useState({ metrics, seconds: 0 })
+  const clockRef = useRef({ metrics, seconds: 0 })
+  const seconds = clock.metrics === metrics ? clock.seconds : 0
+  const meters = metrics.distanceAtSeconds(seconds)
 
   useEffect(() => {
-    if (!running || total <= 0 || totalSeconds <= 0) return
-    const metersPerSecond = total / totalSeconds
+    if (!running || total <= 0 || metrics.totalSeconds <= 0) return
     let last = performance.now()
 
     const timer = window.setInterval(() => {
       const now = performance.now()
-      const next = Math.min(total, metersRef.current + metersPerSecond * speed * ((now - last) / 1000))
+      if (document.hidden) { last = now; return }
+      const previous = clockRef.current.metrics === metrics ? clockRef.current.seconds : 0
+      const next = Math.min(metrics.totalSeconds, previous + speed * ((now - last) / 1000))
       last = now
-      metersRef.current = next
-      setMeters(next)
-      if (next >= total) setRunning(false)
+      clockRef.current = { metrics, seconds: next }
+      setClock(clockRef.current)
+      if (next >= metrics.totalSeconds) setRunning(false)
     }, 250)
 
     return () => window.clearInterval(timer)
-  }, [running, speed, total, totalSeconds])
+  }, [running, speed, total, metrics])
 
-  const position: LatLon | null = geometry && meters > 0 ? pointAlong(geometry, meters, along) : null
+  const coordinate = metrics.pointAtDist(meters)
+  const position: LatLon | null = geometry && meters > 0 ? [coordinate[1], coordinate[0]] : null
 
   return {
     position,
     running,
     speed,
     progress: total > 0 ? meters / total : 0,
+    remainingSeconds: Math.max(0, metrics.totalSeconds - seconds),
+    remainingMeters: Math.max(0, total - meters),
+    speedKmh: metrics.speedAtSeconds(seconds),
     setSpeed,
     toggle: () => {
-      if (!running && metersRef.current >= total) {
-        metersRef.current = 0
-        setMeters(0)
+      if (!running && seconds >= metrics.totalSeconds) {
+        clockRef.current = { metrics, seconds: 0 }
+        setClock(clockRef.current)
       }
       setRunning((value) => !value)
     },

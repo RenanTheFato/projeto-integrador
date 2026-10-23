@@ -22,6 +22,7 @@ function replayHarness() {
     getLayer: (id: string) => layers.get(id),
     addLayer: (layer: Layer) => { layers.set(layer.id, layer); layer.onAdd(map, {}) },
     getCanvas: () => ({}),
+    queryTerrainElevation: () => null,
     triggerRepaint() {},
   }
   class Renderer {
@@ -41,6 +42,7 @@ function replayHarness() {
           return { x: 0, y: 0, z: 0, meterInMercatorCoordinateUnits: () => 1 }
         } },
       }
+      if (id === "./environment") return { sunPosition: () => ({ night: false }) }
       return {
         createFireTruckModel: () => new THREE.Group(),
         disposeFireTruckModel() {},

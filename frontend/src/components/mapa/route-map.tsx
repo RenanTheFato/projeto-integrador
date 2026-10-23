@@ -16,28 +16,41 @@ import {
 import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 
-import type { Closure, GraphBounds, RouteSegment } from "@/api/types"
+import type { Closure, GraphBounds, RouteFeature, RouteSegment, RouteStep, OccurrenceNature, OccurrencePriority, Vehicle, WaterSource } from "@/api/types"
+import { waterSources } from '@/api/endpoints'
+import { ARRIVAL_DURATION_SECONDS } from "./map/arrival-scenes"
+import { setSceneContext, setStationDeparture } from './map/scene-context'
+import { setEnvironmentPlayback } from './map/environment'
 import type { CamMode } from "./types/types"
-import { STYLE, WAZE_PITCH, WAZE_ZOOM } from "./constants/constants"
+import { mapStyle, WAZE_PITCH, WAZE_ZOOM } from "./constants/constants"
 import { bearingBetween, measureRoute, toMapCoords } from "./routes/utils"
 import type { LngLat, RouteMetrics } from "./routes/utils"
 import {
-  addArrowLayer, createMarker, createStationMarker, moveArrow, showArrow, showComparisonVehicle,
+  addArrowLayer, addComparisonVehicleLayer, createMarker, createStationMarker, moveArrow, moveComparisonVehicle, showArrow, showComparisonVehicle, setVehicleGhost, setMapVehicleVisual, setArrivalFrame,
 } from "./map/markers"
 import {
   addCoverageLayer, addRouteLayers, set3DEnvironment, setBuildingLayersVisibility,
   setComparisonVisibility, setLayerVisibility, updateCoverageData, updateRouteData,
 } from "./map/layers"
 import { startComparisonPlayback } from "./map/comparison-playback"
+import { navigationState, readSimulationCamera, saveSimulationCamera, type SimulationCamera } from "./routes/navigation-policy"
+import { clearNavigationManeuver, setNavigationManeuver, setRoadContext, terrainGradeAlert } from "./map/navigation-overlay"
+import { addAlternativeMarkers, type RouteKind } from './map/alternative-markers'
+import { roadFeatureAlerts, destinationSide } from './routes/route-context'
+import { ElevationProfile, SimulationRecorder } from './simulation-tools'
+import { setBuildingContext, setBuildingOcclusion } from "./map/building-context"
+import { setRouteProgress } from "./map/route-effects"
 import { fitBoundsOf, observeMapToolbar } from "./map/helpers"
 import { setClosures, setSpeedOverlay } from "./map/overlays"
 import { formatDistance } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 import "./mapa.css"
+import "./simulation.css"
 
 /** Taubaté's centre, used until there is a route or a coverage rectangle. */
 const FALLBACK_CENTER: LngLat = [-45.5551, -23.0264]
+const clockLabel = (seconds: number) => `${Math.floor(Math.max(0, Math.ceil(seconds)) / 60)}:${String(Math.max(0, Math.ceil(seconds)) % 60).padStart(2, '0')}`
 
 /**
  * Whether the browser's own fullscreen is engaged.
@@ -109,6 +122,15 @@ export interface RouteMapProps {
   comparisonSimulationRequest?: number
   /** Real estimated times; only their ratio is preserved in the compressed comparison playback. */
   comparisonSimulationTimes?: { primarySeconds: number, comparisonSeconds: number, criticalSeconds?: number }
+  routeSeconds?: number
+  criticalMode?: boolean
+  routeSteps?: RouteStep[] | null
+  comparisonSteps?: RouteStep[] | null
+  criticalSteps?: RouteStep[] | null
+  routeSegments?: RouteSegment[] | null
+  comparisonSegments?: RouteSegment[] | null
+  criticalSegments?: RouteSegment[] | null
+  sharedWithComparison?: number
   /**
    * Edges of the primary route with their predicted speed. When given, the
    * route is painted by how freely the network expects traffic to flow.
@@ -120,6 +142,13 @@ export interface RouteMapProps {
   focus?: { latitude: number, longitude: number, key: number } | null
   /** Where the vehicle is now (GPS or simulation), drawn as its own marker. */
   livePosition?: { latitude: number, longitude: number, label: string } | null
+  routeFeatures?: RouteFeature[]
+  destinationPoint?: { latitude: number; longitude: number } | null
+  onAlternativeSelect?: (kind: RouteKind) => void
+  occurrenceNature?: OccurrenceNature
+  occurrencePriority?: OccurrencePriority
+  vehicleVisual?: Pick<Vehicle, 'type' | 'prefix' | 'appearance'> & { unit_acronym?: string }
+  presentationStep?: string | null
 }
 
 /**
@@ -194,10 +223,22 @@ export default function RouteMap({
   simulationRequest = 0,
   comparisonSimulationRequest = 0,
   comparisonSimulationTimes,
+  routeSeconds,
+  criticalMode = false,
+  routeSteps,
+  comparisonSteps,
+  criticalSteps,
+  routeSegments,
+  comparisonSegments,
+  criticalSegments,
+  sharedWithComparison,
   speedSegments,
   closures,
   focus,
   livePosition,
+  routeFeatures,
+  destinationPoint,
+  onAlternativeSelect, occurrenceNature, occurrencePriority, vehicleVisual, presentationStep,
 }: RouteMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -224,14 +265,34 @@ export default function RouteMap({
   const pauseFollow = useRef<((paused: boolean) => void) | null>(null)
   const followProgressRef = useRef<HTMLProgressElement>(null)
   const followDistanceRef = useRef<HTMLSpanElement>(null)
+  const followSpeedReadoutRef = useRef<HTMLSpanElement>(null)
+  const followLimitRef = useRef<HTMLSpanElement>(null)
+  const followClockRef = useRef<HTMLOutputElement>(null)
+  const followSliderRef = useRef<HTMLInputElement>(null)
+  const followAlertRef = useRef<HTMLParagraphElement>(null)
+  const seekFollow = useRef<((seconds: number) => void) | null>(null)
+  const refreshFollow = useRef<(() => void) | null>(null)
+  const [followSpeed, setFollowSpeed] = useState(1)
+  const followSpeedRef = useRef(1)
+  const [followCamera, setFollowCamera] = useState<SimulationCamera>(readSimulationCamera)
+  const followCameraRef = useRef(followCamera)
 
   const cancelComparison = useRef<(() => void) | null>(null)
+  const presentationPaused = useRef(false)
 
   const [mapMode, setMapMode] = useState<"2d" | "3d">("2d")
   const [camMode, setCamMode] = useState<CamMode>("free")
   const [playback, setPlayback] = useState<"idle" | "follow" | "comparison">("idle")
   const [followPaused, setFollowPaused] = useState(false)
   const [loadingSlow, setLoadingSlow] = useState(false)
+  const [arrivalEnabled, setArrivalEnabled] = useState(() => { try { return localStorage.getItem('zeno.arrival') !== 'off' } catch { return true } })
+  const [arrivalActive, setArrivalActive] = useState(false)
+  const skipArrival = useRef<(() => void) | null>(null)
+  const [isolation, setIsolation] = useState(false)
+  const [water, setWater] = useState<WaterSource[]>([])
+  const [contextWarning, setContextWarning] = useState('')
+  const [ghost, setGhost] = useState(false)
+  const ghostRef = useRef(false)
   const [showComparison, setShowComparison] = useState(true)
   const [view, setView] = useState<MapView>("inline")
 
@@ -245,12 +306,13 @@ export default function RouteMap({
    * those effects again. As state, `load` re-runs every one of them.
    */
   const [ready, setReady] = useState(false)
+  const [loadedMap, setLoadedMap] = useState<maplibregl.Map | null>(null)
 
   const coords = useMemo(() => toMapCoords(route), [route])
   const comparisonCoords = useMemo(() => toMapCoords(comparison), [comparison])
   const criticalCoords = useMemo(() => toMapCoords(critical), [critical])
-  const metrics = useMemo(() => measureRoute(coords), [coords])
-  const comparisonMetrics = useMemo(() => measureRoute(comparisonCoords), [comparisonCoords])
+  const metrics = useMemo(() => measureRoute(coords, routeSegments ?? speedSegments, routeSeconds ?? comparisonSimulationTimes?.primarySeconds), [coords, routeSegments, speedSegments, routeSeconds, comparisonSimulationTimes?.primarySeconds])
+  const comparisonMetrics = useMemo(() => measureRoute(comparisonCoords, comparisonSegments, comparisonSimulationTimes?.comparisonSeconds), [comparisonCoords, comparisonSegments, comparisonSimulationTimes?.comparisonSeconds])
 
   // The map is built once and then fed; the animations read the current route
   // through refs so they never close over stale geometry.
@@ -358,10 +420,23 @@ export default function RouteMap({
 
   const stopFollow = () => {
     if (document.activeElement && wrapRef.current?.querySelector(".follow-hud")?.contains(document.activeElement)) followTriggerRef.current?.focus()
+    setArrivalActive(false)
+    skipArrival.current = null
+    if (mapRef.current) setArrivalFrame(mapRef.current, "primary", "OUTROS", null)
     cancelFollow.current?.()
     cancelFollow.current = null
     pauseFollow.current = null
+    seekFollow.current = null
+    refreshFollow.current = null
+    if (mapRef.current) {
+      showComparisonVehicle(mapRef.current, false)
+      setVehicleGhost(mapRef.current, false)
+      clearNavigationManeuver(mapRef.current)
+      setBuildingOcclusion(mapRef.current, null)
+      setRouteProgress(mapRef.current, 'ai', 0)
+    }
     mapRef.current?.stop()
+    if (mapRef.current) mapRef.current.setPadding({ top: 0, bottom: 0, left: 0, right: 0 })
 
     if (followRAF.current !== null) {
       cancelAnimationFrame(followRAF.current)
@@ -390,13 +465,14 @@ export default function RouteMap({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: STYLE,
+      style: mapStyle(),
       center: metricsRef.current.coords.length > 0 ? metricsRef.current.center : FALLBACK_CENTER,
       zoom: 13.5,
       pitch: 0,
       bearing: 0,
       canvasContextAttributes: { antialias: true },
-      pixelRatio: Math.min(window.devicePixelRatio, 1.5),
+      // Tracking is a continuously moving 3D view, so cap render resolution.
+      pixelRatio: 1,
     })
 
     mapRef.current = map
@@ -434,6 +510,7 @@ export default function RouteMap({
       }
 
       setReady(true)
+      setLoadedMap(map)
     })
 
     if (interactive) {
@@ -450,6 +527,7 @@ export default function RouteMap({
       stopFollow()
       stopComparisonSimulation()
       setReady(false)
+      setLoadedMap(null)
       originMarker.current = null
       destinationMarker.current = null
       pinMarker.current = null
@@ -509,6 +587,16 @@ export default function RouteMap({
 
   useEffect(() => {
     const map = mapRef.current
+    if (!map || !ready || playback !== 'idle' || !onAlternativeSelect) return
+    return addAlternativeMarkers(map, [
+      { kind: 'ai', label: 'IA', metrics },
+      { kind: 'standard', label: 'Padrão', metrics: comparisonMetrics },
+      { kind: 'critical', label: 'Crítico', metrics: measureRoute(criticalCoords, criticalSegments, comparisonSimulationTimes?.criticalSeconds) },
+    ], onAlternativeSelect)
+  }, [ready, playback, metrics, comparisonMetrics, criticalCoords, criticalSegments, comparisonSimulationTimes?.criticalSeconds, onAlternativeSelect])
+
+  useEffect(() => {
+    const map = mapRef.current
     if (!map || !ready) return
     if (!livePosition) {
       liveMarker.current?.remove()
@@ -527,7 +615,7 @@ export default function RouteMap({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !ready || !focus) return
-    map.flyTo({ center: [focus.longitude, focus.latitude], zoom: Math.max(map.getZoom(), 16), duration: 700, essential: true })
+    map.flyTo({ center: [focus.longitude, focus.latitude], zoom: Math.max(map.getZoom(), 16), duration: 700, essential: false })
     // Only a new key means a new request; the coordinates alone may repeat.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.key, ready])
@@ -594,6 +682,26 @@ export default function RouteMap({
       markers.clear()
     }
   }, [stationSignature, selectedStationId, nearestStationId, ready])
+
+  useEffect(() => {
+    if (!ready || mapMode !== '3d') return
+    let cancelled = false
+    waterSources.list().then((rows) => { if (!cancelled) { setWater(rows); setContextWarning('') } }).catch(() => { if (!cancelled) setContextWarning('Pontos de água indisponíveis') })
+    return () => { cancelled = true }
+  }, [ready, mapMode])
+
+  const destinationLatitude = destinationPoint?.latitude
+  const destinationLongitude = destinationPoint?.longitude
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    setSceneContext(map, { destination: destinationLongitude !== undefined && destinationLatitude !== undefined ? [destinationLongitude, destinationLatitude] : coords.at(-1) ?? null, priority: occurrencePriority,
+      stations: stations ?? [], selectedStationId, water, isolation, active: playback !== 'idle' })
+  }, [ready, coords, destinationLatitude, destinationLongitude, occurrencePriority, stations, selectedStationId, water, isolation, playback])
+
+  useEffect(() => {
+    if (mapRef.current && ready) setMapVehicleVisual(mapRef.current, vehicleVisual)
+  }, [ready, vehicleVisual])
 
   // -- Size ------------------------------------------------------------------
 
@@ -666,46 +774,75 @@ export default function RouteMap({
 
   // -- Route playback --------------------------------------------------------
 
-  const startFollow = (map: maplibregl.Map) => {
+  const startFollow = (map: maplibregl.Map, arrivalPreview = false) => {
     stopFollow()
     stopComparisonSimulation()
 
     const live = metricsRef.current
     if (live.coords.length < 2) return
 
+    // Starting Waze tracking always selects its forward-facing chase camera.
+    // A previous top-down/flyover selection must not carry into a new drive.
+    followCameraRef.current = 'chase'
+    setFollowCamera('chase')
+    saveSimulationCamera('chase')
     setPlayback("follow")
     const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)")
     let reducedMotion = motionPreference.matches
     followPausedRef.current = reducedMotion
-    setFollowPaused(reducedMotion)
+    if (presentationStep) followPausedRef.current = reducedMotion || presentationPaused.current
+    setFollowPaused(followPausedRef.current)
 
     disableFreeCamera(map)
+    // The navigation camera needs perspective, not costly DEM terrain meshes.
+    // Keep buildings initially; restore the original terrain on exit.
+    setEnvironmentPlayback(map, true)
     followStart.current = null
 
     // The layer may not exist yet if the icon was still decoding when the map
     // loaded, and the 2D/3D toggle hides it — so it is re-asserted here.
     addArrowLayer(map, live.coords[0])
+    const standard = comparisonMetricsRef.current
+    if (standard.coords.length > 1) addComparisonVehicleLayer(map, standard.coords[0])
+    setVehicleGhost(map, ghostRef.current)
+    showComparisonVehicle(map, ghostRef.current && standard.coords.length > 1)
     showArrow(map, true)
+    setRouteProgress(map, 'ai', 0)
+    setBuildingContext(map, live.coords[live.coords.length - 1])
 
-    const initialBearing = bearingBetween(live.coords[0], live.coords[1])
-    moveArrow(map, live.coords[0], initialBearing)
+    followElapsed.current = arrivalPreview ? Math.max(0, live.followDurationMs - 1500) : 0
+    const initialDistance = live.distanceAtSeconds(followElapsed.current / Math.max(1, live.followDurationMs) * live.totalSeconds)
+    const initialPosition = live.pointAtDist(initialDistance)
+    const initialBearing = bearingBetween(initialPosition, live.pointAtDist(initialDistance + 20))
+    moveArrow(map, initialPosition, initialBearing)
     followBearing.current = initialBearing
     followCameraBearing.current = initialBearing
     followFrameTime.current = null
 
     let cancelled = false
-    let frame: FrameRequestCallback | null = null
+    let hudPadding = 0
+    let lastHudMeasure = -Infinity
+    let appliedPadding = -1
+    let slowFrames = 0
+    let lightweightBuildings = false
+    let arrivalElapsed: number | null = null
+    let frame: ((timestamp: number, scrub?: boolean) => void) | null = null
     const cancelFrame = () => {
       if (followRAF.current !== null) cancelAnimationFrame(followRAF.current)
       followRAF.current = null
       followFrameTime.current = null
     }
     const scheduleFrame = () => {
-      if (!cancelled && frame && !followPausedRef.current && !document.hidden && followRAF.current === null) {
+      if (!cancelled && frame && (!followPausedRef.current || (followCameraRef.current === 'orbit' && !reducedMotion)) && !document.hidden && followRAF.current === null) {
         followRAF.current = requestAnimationFrame(frame)
       }
     }
     pauseFollow.current = (paused) => {
+      if (!paused && followCameraRef.current === 'orbit') {
+        followCameraRef.current = 'chase'
+        setFollowCamera('chase')
+        saveSimulationCamera('chase')
+      }
       followPausedRef.current = paused
       setFollowPaused(paused)
       if (paused) {
@@ -714,7 +851,38 @@ export default function RouteMap({
       } else {
         scheduleFrame()
       }
+      if (paused && followCameraRef.current === 'orbit') scheduleFrame()
     }
+    refreshFollow.current = () => {
+      cancelFrame()
+      frame?.(performance.now(), true)
+    }
+    skipArrival.current = () => {
+      arrivalElapsed = ARRIVAL_DURATION_SECONDS
+      setArrivalFrame(map, 'primary', occurrenceNature ?? 'OUTROS', ARRIVAL_DURATION_SECONDS, arrivalEnabled)
+      setArrivalActive(false)
+      pauseFollow.current?.(true)
+    }
+    seekFollow.current = (seconds) => {
+      arrivalElapsed = null
+      setArrivalActive(false)
+      setArrivalFrame(map, 'primary', occurrenceNature ?? 'OUTROS', null)
+      followElapsed.current = Math.min(live.totalSeconds, Math.max(0, seconds)) / Math.max(1, live.totalSeconds) * live.followDurationMs
+      refreshFollow.current?.()
+    }
+    const chooseCamera = (camera: SimulationCamera) => {
+      followCameraRef.current = camera
+      setFollowCamera(camera)
+      saveSimulationCamera(camera)
+      if (camera === 'orbit') pauseFollow.current?.(true)
+      refreshFollow.current?.()
+    }
+    const onCameraKey = (event: KeyboardEvent) => {
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return
+      const camera = ({ '1': 'chase', '2': 'top', '3': 'orbit' } as const)[event.key as '1' | '2' | '3']
+      if (camera) { event.preventDefault(); chooseCamera(camera) }
+    }
+    wrapRef.current?.addEventListener('keydown', onCameraKey)
     const onVisibilityChange = () => {
       if (document.hidden) {
         cancelFrame()
@@ -736,7 +904,7 @@ export default function RouteMap({
       map,
       1200,
       () => map.flyTo({
-        center: live.coords[0],
+        center: initialPosition,
         zoom: reducedMotion ? map.getZoom() : WAZE_ZOOM,
         pitch: reducedMotion ? 0 : WAZE_PITCH,
         bearing: reducedMotion ? 0 : initialBearing,
@@ -748,30 +916,70 @@ export default function RouteMap({
         followStart.current = null
         showArrow(map, true)
         let lastReadout = -Infinity
+        let lastGradeReadout = -Infinity
+        let gradeAlert: { text: string; distance: number } | null = null
 
-        frame = (timestamp: number) => {
+        let navigation = navigationState(live, routeSteps ?? [], 0)
+        frame = (timestamp: number, scrub = false) => {
           followRAF.current = null
-          if (cancelled || followPausedRef.current || document.hidden) {
+          if (cancelled || (!scrub && followPausedRef.current && (followCameraRef.current !== 'orbit' || reducedMotion)) || document.hidden) {
             followFrameTime.current = null
             return
           }
-          const { totalMeters, followDurationMs, pointAtDist } = metricsRef.current
-          const deltaMs = followFrameTime.current === null ? 0 : Math.min(100, Math.max(0, timestamp - followFrameTime.current))
+          const { totalMeters, followDurationMs, pointAtDist, distanceAtSeconds, totalSeconds } = metricsRef.current
+          // Advance by actual wall time: clamping the SIMULATION to 100 ms per
+          // frame makes a 1 FPS browser move just 0.1 s per real second.
+          const clockDeltaMs = followFrameTime.current === null ? 0 : Math.min(1500, Math.max(0, timestamp - followFrameTime.current))
+          const deltaMs = Math.min(100, clockDeltaMs) // only clamp visual damping
           followFrameTime.current = timestamp
-          followElapsed.current += deltaMs
-          const travelled = Math.min(totalMeters, (followElapsed.current / followDurationMs) * totalMeters)
-          if (timestamp - lastReadout > 180) {
+          // Adapt when frame times consistently exceed a tenth of a second.
+          // Low-end GPUs get a flatter but responsive map, not a frozen truck.
+          if (!scrub && !lightweightBuildings) {
+            slowFrames = clockDeltaMs >= 110 ? slowFrames + 1 : Math.max(0, slowFrames - 1)
+            if (slowFrames >= 5) {
+              lightweightBuildings = true
+              setBuildingOcclusion(map, null)
+              setBuildingLayersVisibility(map, false)
+            }
+          }
+          if (!scrub && !followPausedRef.current && followCameraRef.current !== 'orbit') followElapsed.current += clockDeltaMs * followSpeedRef.current
+          const simulatedSeconds = Math.min(totalSeconds, followElapsed.current / Math.max(1, followDurationMs) * totalSeconds)
+          const travelled = distanceAtSeconds((followElapsed.current / Math.max(1, followDurationMs)) * totalSeconds)
+          if (scrub || timestamp - lastReadout > 180) {
             lastReadout = timestamp
+            navigation = navigationState(live, routeSteps ?? [], travelled)
+            if (scrub || timestamp - lastGradeReadout >= 1000) {
+              gradeAlert = terrainGradeAlert(map, live, travelled)
+              lastGradeReadout = timestamp
+            }
             if (followProgressRef.current) followProgressRef.current.value = totalMeters > 0 ? travelled / totalMeters : 1
-            if (followDistanceRef.current) followDistanceRef.current.textContent = `${formatDistance(Math.max(0, totalMeters - travelled))} até o destino`
+            if (followDistanceRef.current) followDistanceRef.current.textContent = `${formatDistance(Math.max(0, totalMeters - travelled))} · ETA ${clockLabel(totalSeconds - simulatedSeconds)}`
+            if (followSpeedReadoutRef.current) followSpeedReadoutRef.current.textContent = `${Math.round(live.speedAtSeconds(simulatedSeconds))} km/h previstos${criticalMode || navigation.emergency ? ' · modo crítico' : ''}`
+            if (followLimitRef.current) {
+              followLimitRef.current.textContent = navigation.limitKmh ? String(navigation.limitKmh) : '—'
+              followLimitRef.current.title = navigation.limitKmh ? `Limite informado: ${navigation.limitKmh} km/h` : 'Limite não informado'
+            }
+            if (followClockRef.current) followClockRef.current.textContent = `${clockLabel(simulatedSeconds)} / ${clockLabel(totalSeconds)}`
+            if (followSliderRef.current) followSliderRef.current.value = String(simulatedSeconds)
+            const featureAlert = roadFeatureAlerts(routeFeatures ?? [], live.cumulative, travelled)[0]
+            const alert = [gradeAlert, navigation.alert, featureAlert].filter((entry): entry is { text: string; distance: number } => !!entry).sort((a, b) => a.distance - b.distance)[0]
+            if (followAlertRef.current) followAlertRef.current.textContent = alert ? `${alert.text} · ${formatDistance(alert.distance)}` : ''
+            setNavigationManeuver(map, live, navigation.maneuver?.meters ?? null, travelled)
+            setRoadContext(map, live, routeFeatures ?? [], travelled, navigation.maneuver?.meters ?? null)
+            setRouteProgress(map, 'ai', totalMeters > 0 ? travelled / totalMeters : 1)
+            map.fire('zeno:progress', { fraction: totalMeters > 0 ? travelled / totalMeters : 1 })
           }
 
           if (travelled >= totalMeters) {
-            stopFollow()
-            enableFreeCamera(map)
-            setCamMode("free")
-            showArrow(map, false)
-            return
+            if (scrub || reducedMotion || !arrivalEnabled) {
+              setArrivalFrame(map, 'primary', occurrenceNature ?? 'OUTROS', ARRIVAL_DURATION_SECONDS, false)
+              if (!followPausedRef.current) pauseFollow.current?.(true)
+            } else if (arrivalElapsed === null || arrivalElapsed < ARRIVAL_DURATION_SECONDS) {
+              if (arrivalElapsed === null) { arrivalElapsed = 0; setArrivalActive(true) }
+              arrivalElapsed = Math.min(ARRIVAL_DURATION_SECONDS, arrivalElapsed + deltaMs / 1000)
+              setArrivalFrame(map, 'primary', occurrenceNature ?? 'OUTROS', arrivalElapsed)
+              if (arrivalElapsed >= ARRIVAL_DURATION_SECONDS) { setArrivalActive(false); pauseFollow.current?.(true) }
+            }
           }
 
           const position = pointAtDist(travelled)
@@ -808,20 +1016,43 @@ export default function RouteMap({
 
           // Centering slightly ahead keeps the vehicle below centre and leaves
           // more road visible in the direction of travel, like a navigation HUD.
-          const cameraCenter = pointAtDist(Math.min(travelled + 18, totalMeters))
+          const cameraCenter = pointAtDist(Math.min(travelled + 26, totalMeters))
 
           moveArrow(map, position, bearing)
+          setStationDeparture(map, selectedStationId, followElapsed.current / 1000)
+          if (ghostRef.current && standard.coords.length > 1) {
+            const ghostDistance = standard.distanceAtSeconds(simulatedSeconds)
+            moveComparisonVehicle(map, standard.pointAtDist(ghostDistance), bearingBetween(standard.pointAtDist(ghostDistance - 10), standard.pointAtDist(ghostDistance + 10)), 3)
+          }
+          if (!lightweightBuildings) setBuildingOcclusion(map, position)
+          const camera = followCameraRef.current
+          // The replay controls cover the lower map. Keep the truck in the
+          // unobstructed viewport instead of hiding it behind the HUD.
+          if (scrub || timestamp - lastHudMeasure > 250) {
+            lastHudMeasure = timestamp
+            const hudHeight = wrapRef.current?.querySelector<HTMLElement>('.follow-hud')?.offsetHeight ?? 0
+            const mapHeight = map.getContainer().clientHeight
+            hudPadding = Math.min(Math.max(0, mapHeight - 120), hudHeight + 40)
+          }
+          // Changing padding is expensive in MapLibre; only apply it when the
+          // controls actually change size or when the user switches camera.
+          const desiredPadding = camera === 'chase' ? hudPadding : 0
+          if (!reducedMotion && desiredPadding !== appliedPadding) {
+            appliedPadding = desiredPadding
+            map.setPadding({ top: 0, bottom: desiredPadding, left: 0, right: 0 })
+          }
+          const cameraBlend = scrub ? 1 : 1 - Math.exp(-Math.max(deltaMs, 16) / 240)
           if (!reducedMotion) map.jumpTo({
-            center: cameraCenter,
-            bearing: cameraBearing,
-            pitch: WAZE_PITCH,
-            zoom: WAZE_ZOOM,
+            center: camera === 'chase' ? cameraCenter : position,
+            bearing: arrivalElapsed !== null ? map.getBearing() + deltaMs * .025 : camera === 'top' ? 0 : camera === 'orbit' ? map.getBearing() + deltaMs * 0.006 : cameraBearing,
+            pitch: map.getPitch() + ((camera === 'top' ? 0 : navigation.pitch) - map.getPitch()) * cameraBlend,
+            zoom: map.getZoom() + ((camera === 'top' ? 16.5 : navigation.zoom) - map.getZoom()) * cameraBlend,
           })
 
           scheduleFrame()
         }
 
-        scheduleFrame()
+        frame(performance.now(), true)
       },
     )
     cancelFollow.current = () => {
@@ -830,6 +1061,9 @@ export default function RouteMap({
       cancelCamera()
       motionPreference.removeEventListener("change", onMotionChange)
       document.removeEventListener("visibilitychange", onVisibilityChange)
+      wrapRef.current?.removeEventListener('keydown', onCameraKey)
+      setEnvironmentPlayback(map, false)
+      if (lightweightBuildings) setBuildingLayersVisibility(map, true)
     }
   }
 
@@ -838,7 +1072,7 @@ export default function RouteMap({
     stopComparisonSimulation()
     const primary = metricsRef.current
     const secondary = comparisonMetricsRef.current
-    const emergency = measureRoute(criticalCoords)
+    const emergency = measureRoute(criticalCoords, criticalSegments, comparisonSimulationTimes?.criticalSeconds)
     if (primary.coords.length < 2 || secondary.coords.length < 2 || !wrapRef.current) return
     setMapMode("3d")
     setCamMode("follow")
@@ -852,15 +1086,15 @@ export default function RouteMap({
     disableFreeCamera(map)
     showArrow(map, false)
     const participants = [
-      { metrics: primary, seconds: comparisonSimulationTimes?.primarySeconds ?? primary.totalMeters, kind: "ai" as const },
-      { metrics: secondary, seconds: comparisonSimulationTimes?.comparisonSeconds ?? secondary.totalMeters, kind: "standard" as const },
-      ...(emergency.coords.length > 1 ? [{ metrics: emergency, seconds: comparisonSimulationTimes?.criticalSeconds ?? emergency.totalMeters, kind: "critical" as const }] : []),
+      { metrics: primary, seconds: primary.totalSeconds, kind: "ai" as const, sharedWithStandard: sharedWithComparison, steps: routeSteps },
+      { metrics: secondary, seconds: secondary.totalSeconds, kind: "standard" as const, steps: comparisonSteps },
+      ...(emergency.coords.length > 1 ? [{ metrics: emergency, seconds: emergency.totalSeconds, kind: "critical" as const, steps: criticalSteps }] : []),
     ]
     cancelComparison.current = startComparisonPlayback(map, wrapRef.current, participants, () => {
       setCamMode("free")
       setPlayback("idle")
       enableFreeCamera(map)
-    })
+    }, { nature: occurrenceNature ?? "OUTROS", enabled: arrivalEnabled, stationId: selectedStationId })
   }
 
   const handleCamModeChange = (next: CamMode) => {
@@ -979,6 +1213,38 @@ export default function RouteMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comparisonSimulationRequest, ready])
 
+  useEffect(() => {
+    const control = (event: Event) => {
+      const detail = (event as CustomEvent<{ step: string; paused: boolean }>).detail
+      if (!detail || detail.step !== presentationStep) return
+      const paused = detail.paused || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      presentationPaused.current = paused
+      pauseFollow.current?.(paused)
+      mapRef.current?.fire('zeno:pause', { paused })
+    }
+    window.addEventListener('zeno:presentation', control)
+    return () => window.removeEventListener('zeno:presentation', control)
+  }, [presentationStep])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready || !hasRoute || !['route', 'comparison', 'arrival'].includes(presentationStep ?? '')) return
+    wrapRef.current?.scrollIntoView({ block: 'center', behavior: 'instant' })
+    stopOrbit()
+    if (presentationStep === 'comparison') {
+      startComparisonSimulation(map)
+      map.fire('zeno:pause', { paused: presentationPaused.current || window.matchMedia('(prefers-reduced-motion: reduce)').matches })
+    } else {
+      setMapMode('3d'); setCamMode('follow')
+      setLayerVisibility(map, true); set3DEnvironment(map, true); setBuildingLayersVisibility(map, true)
+      map.setMaxPitch(85); map.setMaxZoom(20)
+      startFollow(map, presentationStep === 'arrival')
+    }
+    return () => { stopFollow(); stopComparisonSimulation() }
+    // A tour step starts once after its real geometry and style are ready.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presentationStep, ready, hasRoute])
+
   if (!showMap) {
     return (
       <div className={cn("flex flex-col items-center justify-center gap-3 border bg-surface", className)}>
@@ -989,7 +1255,7 @@ export default function RouteMap({
   }
 
   return (
-    <div ref={wrapRef} className={cn("map-wrap border", playback !== "idle" && "map-playing", className)} onKeyDown={(event) => { if (event.key === "Escape" && playback === "follow") { event.preventDefault(); handleCamModeChange("free") } }}>
+    <div ref={wrapRef} className={cn("map-wrap border", playback !== "idle" && "map-playing", playback === "follow" && "map-following", className)} onKeyDown={(event) => { if (event.key === "Escape" && playback === "follow") { event.preventDefault(); if (arrivalActive) skipArrival.current?.(); else handleCamModeChange("free") } }}>
       <div ref={containerRef} className="map" />
       <div ref={toolbarRef} className="top-controls">
         <div className="map-toolbar-title"><span>MAPA OPERACIONAL</span><strong>{playback === "comparison" ? "Comparação de percursos" : playback === "follow" ? "Acompanhamento da rota" : "Visão do território"}</strong></div>
@@ -1010,6 +1276,7 @@ export default function RouteMap({
               </button>
             </div>
           )}
+          {hasRoute && <div className="toggle-wrap"><button type="button" aria-pressed={isolation} onClick={() => setIsolation((value) => !value)}>Isolamento</button></div>}
           <div className="toggle-wrap map-view-controls" role="group" aria-label="Enquadramento do mapa">
             <button type="button" disabled={!ready || playback !== "idle"} className="view" aria-label="Enquadrar rotas e unidades" title="Enquadrar rotas e unidades" onClick={() => {
               const map = mapRef.current
@@ -1027,17 +1294,37 @@ export default function RouteMap({
           </div>
         </div>
       </div>
+      {contextWarning && mapMode === "3d" && <p className="map-context-warning" role="status">{contextWarning}</p>}
       {!ready && <div className="map-loading" role="status"><MapIcon size={25} /><strong>{loadingSlow ? "A cartografia está demorando a responder" : "Carregando cartografia"}</strong><span>{loadingSlow ? "Verifique a conexão com o serviço de mapas." : "Preparando vias e referências do território…"}</span></div>}
       {ready && playback === "idle" && hasRoute && (
-        <div className="map-route-caption"><Navigation size={15} /><div><strong>{originLabel} <span aria-hidden="true">→</span> {destinationLabel}</strong><span>{formatDistance(metrics.totalMeters)} de traçado · {mapMode === "3d" ? "Perspectiva 3D" : "Vista superior"}</span></div></div>
+        <div className="map-route-caption"><Navigation size={15} /><div><strong>{originLabel} <span aria-hidden="true">→</span> {destinationLabel}</strong><span>{formatDistance(metrics.totalMeters)} de traçado · {mapMode === "3d" ? "Perspectiva 3D" : "Vista superior"}{destinationPoint && destinationSide(coords, [destinationPoint.longitude, destinationPoint.latitude]) ? ` · destino à ${destinationSide(coords, [destinationPoint.longitude, destinationPoint.latitude])}` : ''}</span></div></div>
       )}
       {playback === "follow" && (
         <div className="follow-hud">
           <div className="follow-heading"><div><span className="map-kicker">REPRODUÇÃO DO PERCURSO</span><strong>{followPaused ? "Reprodução pausada" : "Seguindo a rota"}</strong></div><div className="follow-actions">
+            <select className="simulation-camera" aria-label="Câmera de acompanhamento" value={followCamera} onChange={(event) => {
+              const camera = event.target.value as SimulationCamera
+              followCameraRef.current = camera; setFollowCamera(camera); saveSimulationCamera(camera)
+              if (camera === 'orbit') pauseFollow.current?.(true)
+              refreshFollow.current?.()
+            }}><option value="chase">1 · Perseguição</option><option value="top">2 · De cima</option><option value="orbit">3 · Órbita parada</option></select>
+            <button type="button" aria-label={`Velocidade do replay: ${followSpeed} vezes`} onClick={() => { const next = followSpeed === 1 ? 2 : followSpeed === 2 ? 4 : 1; followSpeedRef.current = next; setFollowSpeed(next) }}>{followSpeed}×</button>
+            <button type="button" onClick={() => seekFollow.current?.(0)}>Rever</button>
             <button type="button" aria-pressed={followPaused} onClick={() => pauseFollow.current?.(!followPausedRef.current)}>{followPaused ? <Play size={14} /> : <Pause size={14} />}{followPaused ? "Continuar" : "Pausar"}</button>
             <button type="button" onClick={() => handleCamModeChange("free")}><Square size={12} />Encerrar</button>
           </div></div>
-          <div className="follow-readout"><span ref={followDistanceRef}>{formatDistance(metrics.totalMeters)} até o destino</span><span>Posição simulada</span></div>
+          {arrivalActive && <div className="simulation-arrival" role="status"><span>Cena ilustrativa de chegada · nenhum status operacional é alterado</span><button type="button" onClick={() => skipArrival.current?.()}>Pular · Esc</button></div>}
+          <div className="follow-readout"><span ref={followDistanceRef}>{formatDistance(metrics.totalMeters)} · ETA {clockLabel(metrics.totalSeconds)}</span><span className="simulation-speed"><span ref={followLimitRef} className="simulation-limit" title="Limite informado">—</span><span ref={followSpeedReadoutRef}>Velocidade estimada por trecho</span></span><span>Posição simulada</span></div>
+          <p className="simulation-alert" ref={followAlertRef} role="status" />
+          <label className="simulation-ghost"><input type="checkbox" checked={arrivalEnabled} onChange={(event) => { setArrivalEnabled(event.target.checked); try { localStorage.setItem('zeno.arrival', event.target.checked ? 'on' : 'off') } catch { /* Optional storage. */ } }} />Animações ilustrativas de chegada (próximo replay)</label>
+          {comparisonMetrics.coords.length > 1 && <label className="simulation-ghost"><input type="checkbox" checked={ghost} onChange={(event) => {
+            const enabled = event.target.checked; setGhost(enabled); ghostRef.current = enabled
+            if (mapRef.current) { setVehicleGhost(mapRef.current, enabled); showComparisonVehicle(mapRef.current, enabled); refreshFollow.current?.() }
+          }} />Fantasma da rota padrão · mesmo relógio</label>}
+          {loadedMap && <div className="simulation-tools"><ElevationProfile map={loadedMap} route={metrics} /><SimulationRecorder map={loadedMap} flyover={() => { followCameraRef.current = 'top'; setFollowCamera('top'); seekFollow.current?.(0); pauseFollow.current?.(false) }} /></div>}
+          <div className="simulation-timeline"><output ref={followClockRef}>0:00 / {clockLabel(metrics.totalSeconds)}</output><input ref={followSliderRef} type="range" min={0} max={metrics.totalSeconds} step={0.1} defaultValue={0} aria-label="Tempo do percurso" onChange={(event) => seekFollow.current?.(Number(event.target.value))} />
+            <div className="simulation-milestones"><button type="button" onClick={() => seekFollow.current?.(0)}>Saída</button>{(routeSteps ?? []).filter((step) => step.type === 'turn' || step.type === 'roundabout').map((step, index) => <button key={`${step.geometry_index}-${index}`} type="button" onClick={() => seekFollow.current?.(metrics.secondsAtDistance(metrics.cumulative[step.geometry_index] ?? 0))}>{step.type === 'roundabout' ? 'Rotatória' : step.street ?? 'Conversão'}</button>)}<button type="button" onClick={() => seekFollow.current?.(metrics.totalSeconds)}>Chegada</button></div>
+          </div>
           <progress ref={followProgressRef} max={1} value={0} aria-label="Progresso do percurso" />
         </div>
       )}

@@ -86,7 +86,7 @@ export function RouteGuide({ geometry, steps, position, simulation }: {
               announced.current = { index: -1, near: false }
               if (!next) window.speechSynthesis?.cancel()
             }}
-            className={cn("inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-sm font-semibold", voice ? "border-accent bg-accent text-white" : "border-line-strong text-ink", !hasSteps && "cursor-not-allowed opacity-50")}
+            className={cn("inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-sm font-semibold", voice ? "border-action bg-action text-white" : "border-line-strong text-ink", !hasSteps && "cursor-not-allowed opacity-50")}
           >
             {voice ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             Voz
@@ -131,10 +131,10 @@ export function RouteGuide({ geometry, steps, position, simulation }: {
           aria-label="Velocidade da simulação"
           className="rounded-sm border border-line px-2 py-1.5 text-sm"
         >
-          {[1, 4, 10, 30].map((value) => <option key={value} value={value}>{value}×</option>)}
+          {[1, 2, 4, 10, 30].map((value) => <option key={value} value={value}>{value}×</option>)}
         </select>
         {simulation.progress > 0 && (
-          <span className="text-xs tabular-nums text-ink-muted">{Math.round(simulation.progress * 100)}%</span>
+          <span className="text-xs tabular-nums text-ink-muted">{Math.round(simulation.speedKmh)} km/h previstos · {formatDistance(simulation.remainingMeters)} · ETA {Math.floor(simulation.remainingSeconds / 60)}:{String(Math.ceil(simulation.remainingSeconds) % 60).padStart(2, '0')}</span>
         )}
       </div>
     </section>

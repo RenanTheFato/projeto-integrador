@@ -103,9 +103,9 @@ export const SPEED_BAND_LABEL: Record<SpeedBand, string> = {
 
 /** The semantic tokens of the console: ok, warn, alert. */
 export const SPEED_BAND_COLOR: Record<SpeedBand, string> = {
-  fluid: "#2F6A52",
-  moderate: "#B07A12",
-  slow: "#A32A20",
+  fluid: "#7DC4A1",
+  moderate: "#E6BD70",
+  slow: "#EF8C87",
 }
 
 export const ROAD_CLASS_LABEL = {

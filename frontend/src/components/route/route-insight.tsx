@@ -21,9 +21,9 @@ const ROAD_ORDER: RoadClass[] = ["highway", "primary", "secondary", "tertiary", 
 
 /** Darkest for the fastest roads, fading towards local streets. */
 const ROAD_SHADE: Record<RoadClass, string> = {
-  highway: "#0A3F68",
-  primary: "#0B63A5",
-  secondary: "#3B86C0",
+  highway: "#42799F",
+  primary: "#5898BD",
+  secondary: "#79ADC9",
   tertiary: "#8DB6D8",
   local: "#C9D6E2",
 }

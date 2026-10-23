@@ -18,6 +18,7 @@ import {
 } from "@/components/layout/kit"
 import { ErrorBox, ErrorDetails } from "@/components/layout/feedback"
 import RouteMap from "@/components/mapa/route-map"
+import { COMPARISON_COLOR, CRITICAL_COLOR, ROUTE_COLOR } from "@/components/mapa/constants/constants"
 import { RouteBenchmark } from "@/components/route/route-benchmark"
 import { RouteInsight } from "@/components/route/route-insight"
 import { RouteSteps } from "@/components/route/route-steps"
@@ -165,7 +166,7 @@ export default function Rotas() {
         subtitle="Planeje o deslocamento, compare os percursos e acompanhe a simulação das viaturas."
       />
 
-      <Panel title="Planejar deslocamento" icon={<Compass className="h-5 w-5" />}>
+      <Panel title="Planejar deslocamento" icon={<Compass className="h-5 w-5" />} className="route-setup">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {calculate.error && <ErrorBox message={calculate.error} />}
           <ErrorDetails details={calculate.details} />
@@ -214,6 +215,7 @@ export default function Rotas() {
             </Field>
           </div>
 
+          <div className="route-tools-row">
           <div className="route-critical-option" data-active={criticalMode}>
           <label className="flex cursor-pointer items-start gap-3">
             <input
@@ -230,6 +232,17 @@ export default function Rotas() {
             </span>
           </label>
           <details className="route-detail-note"><summary>Critérios do modo crítico</summary><p>Considera contrafluxo e vantagens de acostamento quando a malha indicar viabilidade física, sem atravessar barreiras, túneis, pontes, rotatórias ou acessos explicitamente restritos.</p></details>
+          </div>
+
+          <ClosureTools
+            tool={tool}
+            onTool={setTool}
+            radius={closureRadius}
+            onRadius={setClosureRadius}
+            closures={closures}
+            onRemove={(index) => setClosures((current) => current.filter((_, position) => position !== index))}
+            onClear={() => setClosures([])}
+          />
           </div>
 
           {nearest && !outsideCoverage && (
@@ -263,16 +276,6 @@ export default function Rotas() {
             </p>
           )}
 
-          <ClosureTools
-            tool={tool}
-            onTool={setTool}
-            radius={closureRadius}
-            onRadius={setClosureRadius}
-            closures={closures}
-            onRemove={(index) => setClosures((current) => current.filter((_, position) => position !== index))}
-            onClear={() => setClosures([])}
-          />
-
           <div className="route-submit-row">
             <details className="route-detail-note"><summary>{model.data ? `Área de cálculo · ${model.data.city}` : "Sobre a área de cálculo"}</summary><p>
               {model.data
@@ -291,6 +294,7 @@ export default function Rotas() {
       <div className={theater ? "flex flex-col gap-5" : "grid items-start gap-5 xl:grid-cols-[minmax(0,2.1fr)_minmax(310px,1fr)]"}>
         <Panel
           title="Mapa de deslocamento"
+          className="route-map-panel"
           icon={<RouteIcon className="h-5 w-5" />}
           actions={result ? (
             <div className="flex flex-wrap gap-2">
@@ -318,17 +322,17 @@ export default function Rotas() {
           {result && (
             <div className="route-legend">
               <span className="flex items-center gap-2">
-                <span className="h-[3px] w-5 bg-[#0B63A5]" />
+                <span className="h-[3px] w-5" style={{ backgroundColor: ROUTE_COLOR }} />
                 IA
               </span>
               {result.critical && (
                 <span className="flex items-center gap-2">
-                  <span className="h-[3px] w-5 bg-[#C9362B]" />
+                  <span className="h-[3px] w-5" style={{ backgroundColor: CRITICAL_COLOR }} />
                   Modo crítico
                 </span>
               )}
               <span className="flex items-center gap-2">
-                <span className="h-[3px] w-5 bg-[#D97706]" />
+                <span className="h-[3px] w-5" style={{ backgroundColor: COMPARISON_COLOR }} />
                 Padrão
               </span>
               <small>{result.critical ? 3 : 2} percursos calculados</small>
@@ -351,6 +355,16 @@ export default function Rotas() {
             theater={theater}
             onTheaterToggle={() => setTheater((current) => !current)}
             comparisonSimulationRequest={comparisonSimulationRequest}
+            routeSegments={result?.neural.segments}
+            routeFeatures={result?.neural.route_features}
+            destinationPoint={destinationValid ? destination : null}
+            onAlternativeSelect={(kind) => setStepsOf(kind === 'ai' ? 'neural' : kind === 'standard' ? 'shortest' : 'critical')}
+            routeSteps={result?.neural.steps}
+            comparisonSteps={result?.shortest.steps}
+            criticalSteps={result?.critical?.steps}
+            comparisonSegments={result?.shortest.segments}
+            criticalSegments={result?.critical?.segments}
+            sharedWithComparison={result?.neural.shared_with_shortest}
             speedSegments={explain ? result?.neural.segments ?? null : null}
             closures={closures}
             focus={focus}
@@ -440,7 +454,7 @@ function ClosureTools({ tool, onTool, radius, onRadius, closures, onRemove, onCl
   onClear: () => void
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-sm border border-line bg-surface-muted px-4 py-3">
+    <div className="route-closures flex flex-col gap-3 rounded-sm border border-line bg-surface-muted px-4 py-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
           <span className="label-caps text-ink-muted">Clique no mapa para</span>
@@ -496,9 +510,9 @@ function RoutePerformance({ neural, critical, shortest }: {
 }) {
   const [metric, setMetric] = useState<"time" | "distance">("time")
   const variants = [
-    { label: "IA", color: "#0B63A5", route: neural },
-    ...(critical ? [{ label: "Modo crítico", color: "#B8322A", route: critical }] : []),
-    { label: "Padrão", color: "#B86A12", route: shortest },
+    { label: "IA", color: ROUTE_COLOR, route: neural },
+    ...(critical ? [{ label: "Modo crítico", color: CRITICAL_COLOR, route: critical }] : []),
+    { label: "Padrão", color: COMPARISON_COLOR, route: shortest },
   ]
   const valueOf = (route: RoutePreview) => metric === "time" ? route.estimated_time_seconds : route.distance_meters
   const max = Math.max(...variants.map((entry) => valueOf(entry.route)), 1)

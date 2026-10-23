@@ -20,6 +20,44 @@ export type VehicleType =
 
 export type VehicleStatus = "DISPONIVEL" | "EMPENHADA" | "MANUTENCAO" | "INDISPONIVEL"
 
+export type VehicleColor = "vermelho_bombeiro" | "branco" | "amarelo_refletivo" | "grafite"
+export interface VehicleAppearance {
+  variant: "default" | VehicleType
+  body_color: VehicleColor
+  stripe_color: VehicleColor
+  show_prefix: boolean
+  unit_badge: boolean
+}
+
+export interface VehiclePosition {
+  id: string
+  vehicle_id: string
+  latitude: string | number
+  longitude: string | number
+  heading: number | null
+  dispatch_id: string | null
+  recorded_at: string
+}
+export interface PositionHistory {
+  from: string
+  to: string
+  total: number
+  sampled: boolean
+  positions: VehiclePosition[]
+}
+export interface FleetHistory extends Omit<PositionHistory, "positions"> {
+  vehicles: { vehicle_id: string; positions: VehiclePosition[] }[]
+}
+export interface VehicleAlert {
+  vehicle_id: string
+  prefix: string
+  dispatch_id: string
+  kind: "sem_sinal" | "parada"
+  since: string
+  latitude?: string | number | null
+  longitude?: string | number | null
+}
+
 export type CrewRole = "COMANDANTE" | "MOTORISTA" | "COMBATENTE" | "SOCORRISTA"
 
 export type ShiftType = "PLANTAO_24X72" | "PLANTAO_12X36" | "EXPEDIENTE"
@@ -84,6 +122,8 @@ export interface Vehicle {
   status: VehicleStatus
   current_latitude?: string | number | null
   current_longitude?: string | number | null
+  last_position_at?: string | null
+  appearance?: VehicleAppearance | null
   unit_id: string
   unit?: Pick<Unit, "id" | "name" | "acronym"> | null
 }
@@ -191,6 +231,8 @@ export interface RouteVariant {
   /** Null on routes stored before the AI returned them. */
   steps?: RouteStep[] | null
   segments?: RouteSegment[] | null
+  route_features?: RouteFeature[]
+  exploration?: [number, number][]
   model_version?: string | null
   dispatch_id?: string | null
   created_at: string
@@ -222,6 +264,8 @@ export interface RoutePreview {
   geometry: [number, number][]
   steps: RouteStep[]
   segments: RouteSegment[]
+  route_features?: RouteFeature[]
+  exploration?: [number, number][]
   /** Metres driven on each class of road. */
   composition: Record<RoadClass, number>
   /** Neural variant only: share of its distance on the shortest route's streets. */
@@ -269,6 +313,7 @@ export interface TrainingPoint {
   train_loss: number | null
   validation_loss: number | null
   best_validation_loss: number | null
+  learning_rate?: number | null
 }
 
 export interface TrainingRun {
@@ -326,6 +371,21 @@ export interface RouteSegment {
   street: string | null
   counterflow: boolean
   shoulder: boolean
+  incline?: string
+}
+
+export interface RouteFeature {
+  type: "traffic_signals" | "stop" | "crossing" | "speed_bump" | "bridge" | "max_weight" | "max_height" | "narrow"
+  geometry_index: number
+  location: [number, number]
+  value?: string
+}
+export interface RouteWeather { precipitation_mm: number; weather_code: number; advisory: string | null }
+export interface EdgeCosts extends GeoJSON.FeatureCollection<GeoJSON.LineString> { model_version: string | null }
+export interface UnitAreas {
+  model_version: string | null
+  critical_mode: boolean
+  areas: { unit_id: string; acronym: string; area: GeoJSON.MultiPolygon | null; reached_nodes: number; in_network: boolean }[]
 }
 
 export type RoadClass = "highway" | "primary" | "secondary" | "tertiary" | "local"

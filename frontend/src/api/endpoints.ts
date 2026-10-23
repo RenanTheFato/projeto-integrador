@@ -13,6 +13,7 @@ import type {
   ReferenceRoute, RoutePreview, RouteVariant, Shift, ShiftType, TimelineEntry, TrainingRun, Unit, UnitType,
   Vehicle, VehicleRecommendation, VehicleStatus, VehicleType, OperationalStatistics, WaterSource, WaterSourceStatus,
   WaterSourceType, Weather,
+  PositionHistory, FleetHistory, EdgeCosts, UnitAreas, RouteWeather,
 } from "./types"
 
 interface ListParams {
@@ -33,6 +34,7 @@ function paginate<T>(envelope: Record<string, unknown>, key: string): Paginated<
 // -- Units -------------------------------------------------------------------
 
 export const units = {
+  areas: (critical_mode = false) => api.get<UnitAreas>(`/units/areas${query({ critical_mode })}`),
   async list(params: ListParams & { type?: UnitType, parent_id?: string, active?: boolean } = {}): Promise<Paginated<Unit>> {
     const data = await api.get<Record<string, unknown>>(`/units${query({ ...params, per_page: params.per_page ?? 100 })}`)
     return paginate<Unit>(data, "units")
@@ -85,6 +87,8 @@ export const firefighters = {
 // -- Vehicles ----------------------------------------------------------------
 
 export const vehicles = {
+  positions: (id: string, from: string, to: string) => api.get<PositionHistory>(`/vehicles/${id}/positions${query({ from, to })}`),
+  history: (from: string, to: string) => api.get<FleetHistory>(`/vehicles/positions${query({ from, to })}`),
   async list(params: ListParams & { unit_id?: string, type?: VehicleType, status?: VehicleStatus } = {}): Promise<Paginated<Vehicle>> {
     const data = await api.get<Record<string, unknown>>(`/vehicles${query({ ...params })}`)
     return paginate<Vehicle>(data, "vehicles")
@@ -353,7 +357,7 @@ export const ai = {
   calculateRoute: (input: {
     origin_unit_id?: string, origin_latitude?: number, origin_longitude?: number,
     destination_latitude: number, destination_longitude: number, dispatch_id?: string,
-    critical_mode?: boolean, closures?: Closure[],
+    critical_mode?: boolean, closures?: Closure[], trace?: boolean,
   }) => api.post<{
     routes: RouteVariant[] | null,
     neural: RoutePreview,
@@ -361,9 +365,11 @@ export const ai = {
     shortest: RoutePreview,
     critical_mode: boolean,
     closures: { count: number, blocked_edges: number },
+    weather?: RouteWeather | null,
   }>("/ai/routes", input),
 
   etaAccuracy: (limit = 1000) => api.get<EtaAccuracy>(`/ai/eta-accuracy${query({ limit })}`),
+  edgeCosts: (bbox?: string) => api.get<EdgeCosts>(`/ai/edge-costs${query({ bbox })}`),
 
   /** Isochrones of the stations and how much recent demand they reach. */
   coverage: (input: {

@@ -11,15 +11,16 @@
  */
 
 import maplibregl from "maplibre-gl"
+import { configureEnvironment } from "./environment"
+import { drawRoute } from "./route-effects"
+import { setRouteRibbons } from "./route-ribbon"
 import type { Feature, LineString } from "geojson"
 
-import { ROUTE_ALT, ROUTE_COLOR } from "@/components/mapa/constants/constants"
+import { COMPARISON_COLOR, CRITICAL_COLOR, ROUTE_ALT, ROUTE_COLOR } from "@/components/mapa/constants/constants"
 import type { LngLat } from "@/components/mapa/routes/utils"
 import type { GraphBounds } from "@/api/types"
 
-const COMPARISON_COLOR = "#D97706"
 const COMPARISON_DARK = "#7C3F08"
-const CRITICAL_COLOR = "#C9362B"
 const CRITICAL_DARK = "#721C17"
 
 const FLAT_SOURCE = "src-flat"
@@ -62,16 +63,18 @@ export function addRouteLayers(
   comparison: LngLat[],
   critical: LngLat[] = [],
 ) {
-  map.addSource(FLAT_SOURCE, { type: "geojson", data: lineFeature(coords) })
-  map.addSource(LIFTED_SOURCE, { type: "geojson", data: lineFeature(lift(coords)) })
-  map.addSource(COMPARISON_SOURCE, { type: "geojson", data: lineFeature(comparison) })
+  map.addSource(FLAT_SOURCE, { type: "geojson", lineMetrics: true, data: lineFeature(coords) })
+  map.addSource(LIFTED_SOURCE, { type: "geojson", lineMetrics: true, data: lineFeature(lift(coords)) })
+  map.addSource(COMPARISON_SOURCE, { type: "geojson", lineMetrics: true, data: lineFeature(comparison) })
   map.addSource(COMPARISON_LIFTED_SOURCE, {
     type: "geojson",
+    lineMetrics: true,
     data: lineFeature(lift(comparison)),
   })
-  map.addSource(CRITICAL_SOURCE, { type: "geojson", data: lineFeature(critical) })
+  map.addSource(CRITICAL_SOURCE, { type: "geojson", lineMetrics: true, data: lineFeature(critical) })
   map.addSource(CRITICAL_LIFTED_SOURCE, {
     type: "geojson",
+    lineMetrics: true,
     data: lineFeature(lift(critical)),
   })
 
@@ -321,6 +324,8 @@ export function addRouteLayers(
       map.setPaintProperty(id, "line-blur", 3)
     }
   }
+  if (typeof document !== "undefined") setRouteRibbons(map, [coords, comparison, critical])
+  drawRoute(map)
 }
 
 /**
@@ -389,6 +394,8 @@ export function updateRouteData(
   otherLifted?.setData(lineFeature(lift(comparison)))
   criticalSource?.setData(lineFeature(critical))
   criticalLifted?.setData(lineFeature(lift(critical)))
+  if (typeof document !== "undefined") setRouteRibbons(map, [coords, comparison, critical])
+  drawRoute(map)
 }
 
 export function setComparisonVisibility(map: maplibregl.Map, visible: boolean) {
@@ -409,6 +416,7 @@ export function setComparisonVisibility(map: maplibregl.Map, visible: boolean) {
 }
 
 export function setLayerVisibility(map: maplibregl.Map, show3d: boolean) {
+  if (map.getLayer("zeno-route-ribbons")) map.setLayoutProperty("zeno-route-ribbons", "visibility", show3d ? "visible" : "none")
   const flatVisibility = show3d ? "none" : "visible"
   const liftedVisibility = show3d ? "visible" : "none"
 
@@ -422,41 +430,7 @@ export function setLayerVisibility(map: maplibregl.Map, show3d: boolean) {
 }
 
 export function set3DEnvironment(map: maplibregl.Map, visible: boolean) {
-  const landColors: Record<string, string> = {
-    water: "#AEC5CC", park: "#CFDACB", landcover_wood: "#C7D4C2",
-    landcover_grass: "#D6DFCE", landuse_residential: "#E2E7E1",
-    landuse_hospital: "#E5DCD5", landuse_school: "#E3E2D6",
-    landuse_pitch: "#CAD9C5", landcover_sand: "#E3DFCF",
-  }
-  // Preserve geographic meaning while keeping emergency overlays dominant.
-  for (const layer of map.getStyle().layers) {
-    if (layer.type === "background") map.setPaintProperty(layer.id, "background-color", "#E9EDE6")
-    if (layer.type === "fill" && landColors[layer.id]) map.setPaintProperty(layer.id, "fill-color", landColors[layer.id])
-    if (layer.type === "line" && /^(road|bridge|tunnel)_/.test(layer.id) && !/rail|path|pattern/.test(layer.id)) {
-      const casing = layer.id.endsWith("_casing")
-      const arterial = /motorway|trunk|primary/.test(layer.id)
-      map.setPaintProperty(layer.id, "line-color", casing ? "#C8CCBF" : arterial ? "#E8DFBB" : "#F3F3EA")
-    }
-    if (layer.type === "symbol" && layer.id.includes("poi")) map.setLayoutProperty(layer.id, "visibility", "none")
-  }
-  map.setLight({
-    anchor: "viewport",
-    color: visible ? "#FFF7EA" : "#FFFFFF",
-    intensity: visible ? 0.48 : 0.5,
-    position: [1.5, 225, 45],
-  })
-
-  map.setSky(visible
-    ? {
-        "sky-color": "#92AAB8",
-        "horizon-color": "#DBE4E5",
-        "fog-color": "#E7ECE8",
-        "fog-ground-blend": 0.16,
-        "horizon-fog-blend": 0.36,
-        "sky-horizon-blend": 0.62,
-        "atmosphere-blend": 0.7,
-      }
-    : { "atmosphere-blend": 0 })
+  configureEnvironment(map, visible)
 }
 
 export function setBuildingLayersVisibility(map: maplibregl.Map, visible: boolean) {
@@ -466,24 +440,23 @@ export function setBuildingLayersVisibility(map: maplibregl.Map, visible: boolea
     map.setLayoutProperty(layer.id, "visibility", isVolume && !visible ? "none" : "visible")
     if (layer.type === "fill") {
       map.setLayerZoomRange(layer.id, 13, 24)
-      map.setPaintProperty(layer.id, "fill-color", "#CED5D2")
-      map.setPaintProperty(layer.id, "fill-outline-color", "#B2BFBD")
+      map.setPaintProperty(layer.id, "fill-color", typeof document !== "undefined" && document.documentElement.dataset.theme === "light" ? "#BDCACD" : "#263A48")
+      map.setPaintProperty(layer.id, "fill-outline-color", "#3A5060")
     }
 
     if (visible && layer.type === "fill-extrusion") {
       map.setLayerZoomRange(layer.id, 13, 24)
-      map.setPaintProperty(layer.id, "fill-extrusion-opacity", 1)
-      map.setPaintProperty(layer.id, "fill-extrusion-height", ["coalesce", ["get", "render_height"], 3])
+      map.setPaintProperty(layer.id, "fill-extrusion-opacity", 0.88)
       map.setPaintProperty(layer.id, "fill-extrusion-base", ["coalesce", ["get", "render_min_height"], 0])
       map.setPaintProperty(layer.id, "fill-extrusion-vertical-gradient", true)
       map.setPaintProperty(layer.id, "fill-extrusion-color", [
         "interpolate",
         ["linear"],
         ["coalesce", ["get", "render_height"], 0],
-        0, "#DCE2E7",
-        12, "#D0D9E0",
-        35, "#BBC8D2",
-        80, "#9EAFBD",
+        0, typeof document !== "undefined" && document.documentElement.dataset.theme === "light" ? "#BDCACD" : "#304656",
+        12, "#3E586B",
+        35, "#587082",
+        80, "#728A9B",
       ])
     }
   })

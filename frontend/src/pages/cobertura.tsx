@@ -8,26 +8,21 @@
  * station, not counted by drawing a polygon.
  */
 
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Crosshair, MapPinned, Plus, Target, X } from "lucide-react"
 
 import { ai, waterSources } from "@/api/endpoints"
-import { PRIORITY_LABEL } from "@/api/labels"
+import { PRIORITY_LABEL, PRIORITY_TONE } from "@/api/labels"
 import type { Coverage, OccurrencePriority } from "@/api/types"
 import { ActionButton, Field, Page, PageHeader, Panel, Select, StatBox } from "@/components/layout/kit"
 import { ErrorBox, LoadingBlock } from "@/components/layout/feedback"
 import CoverageMap from "@/components/mapa/coverage-map"
 import { POINT_COLOR, pointClass } from "@/components/mapa/coverage-palette"
+import { coverageBands, coverageGaps, coverageStations, type HypotheticalStation } from "@/components/mapa/coverage-ai-policy"
 import { useResource } from "@/hooks/use-resource"
 import { cn } from "@/lib/utils"
 
-const BANDS = [4, 8, 12]
 const PRIORITIES: OccurrencePriority[] = ["CRITICA", "ALTA", "MEDIA", "BAIXA"]
-
-interface Hypothetical {
-  latitude: number
-  longitude: number
-}
 
 function share(coverage: Coverage | null, minutes: number): number | null {
   if (!coverage?.demand || coverage.demand.sample_size === 0) return null
@@ -41,24 +36,27 @@ export default function Cobertura() {
   const [criticalMode, setCriticalMode] = useState(false)
   const [sampleSize, setSampleSize] = useState("3000")
   const [placing, setPlacing] = useState(false)
-  const [extras, setExtras] = useState<Hypothetical[]>([])
+  const [extras, setExtras] = useState<HypotheticalStation[]>([])
+  const nextStation = useRef(1)
   const [showWater, setShowWater] = useState(false)
 
-  const minutes = useMemo(() => [...new Set([...BANDS, target])].sort((a, b) => a - b), [target])
+  const minutes = useMemo(() => coverageBands(target), [target])
 
+  const parametersKey = `${minutes.join(",")}:${criticalMode}:${sampleSize}`
   const baseline = useResource(
-    () => ai.coverage({ minutes, critical_mode: criticalMode, sample_size: Number(sampleSize) }),
+    () => ai.coverage({ minutes, critical_mode: criticalMode, sample_size: Number(sampleSize) }).then(coverage => ({ key: parametersKey, coverage })),
     [minutes.join(","), criticalMode, sampleSize],
   )
 
-  const extrasKey = extras.map((point) => `${point.latitude.toFixed(5)},${point.longitude.toFixed(5)}`).join(";")
+  const extrasKey = JSON.stringify(extras)
+  const scenarioKey = `${parametersKey}:${extrasKey}`
   const scenario = useResource(
     () => ai.coverage({
       minutes,
       critical_mode: criticalMode,
       sample_size: Number(sampleSize),
-      extra_stations: extras.map((point, index) => ({ ...point, label: `NOVO-${index + 1}` })),
-    }),
+      extra_stations: extras,
+    }).then(coverage => ({ key: scenarioKey, coverage })),
     [minutes.join(","), criticalMode, sampleSize, extrasKey],
     { enabled: extras.length > 0 },
   )
@@ -67,12 +65,15 @@ export default function Cobertura() {
 
   // While a scenario is being priced the baseline stays on screen, so the map
   // never goes blank between clicks.
-  const shown = extras.length > 0 ? scenario.data ?? baseline.data : baseline.data
+  const baselineData = baseline.data?.key === parametersKey ? baseline.data.coverage : null
+  const scenarioData = scenario.data?.key === scenarioKey ? scenario.data.coverage : null
+  const shown = extras.length > 0 ? scenarioData ?? baselineData : baselineData
+  const mapStations = useMemo(() => coverageStations(shown?.stations ?? [], extras), [shown, extras])
   const loading = extras.length > 0 ? scenario.loading : baseline.loading
   const error = extras.length > 0 ? scenario.error : baseline.error
 
-  const baseShare = share(baseline.data, target)
-  const scenarioShare = extras.length > 0 ? share(scenario.data, target) : null
+  const baseShare = share(baselineData, target)
+  const scenarioShare = extras.length > 0 ? share(scenarioData, target) : null
 
   const maxMinutes = Math.max(...minutes)
 
@@ -86,11 +87,13 @@ export default function Cobertura() {
   }, [shown, target, maxMinutes])
 
   function handlePick(latitude: number, longitude: number) {
-    setExtras((current) => [...current, { latitude, longitude }].slice(-3))
+    const label = `NOVO-${nextStation.current++}`
+    setExtras((current) => [...current, { label, latitude, longitude }].slice(-3))
     setPlacing(false)
   }
 
   const targetArea = shown?.isochrones.find((area) => area.minutes === target)
+  const gaps = useMemo(() => coverageGaps(shown?.demand?.points ?? [], target), [shown, target])
 
   return (
     <Page>
@@ -140,35 +143,53 @@ export default function Cobertura() {
       </div>
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2.2fr)_minmax(300px,1fr)]">
-        <Panel title="Mapa de cobertura" icon={<MapPinned className="h-5 w-5" />}>
-          {error && <ErrorBox message={error} onRetry={extras.length > 0 ? scenario.reload : baseline.reload} />}
-          {loading && !shown && <LoadingBlock label="Calculando as áreas pela rede neural..." />}
+        <Panel className="coverage-map-panel" title="Mapa de cobertura" icon={<MapPinned className="h-5 w-5" />}>
+          {(error || (loading && !shown)) && (
+            <div className="flex flex-col gap-4 p-4">
+              {error && <ErrorBox message={error} onRetry={extras.length > 0 ? scenario.reload : baseline.reload} />}
+              {loading && !shown && <LoadingBlock label="Calculando as áreas pela rede neural..." />}
+            </div>
+          )}
           <div className="relative">
             <CoverageMap
               areas={shown?.isochrones ?? []}
-              stations={shown?.stations ?? []}
+              stations={mapStations}
               points={shown?.demand?.points ?? []}
               targetMinutes={target}
               waterSources={showWater ? water.data ?? [] : []}
               onPick={placing ? handlePick : undefined}
+              onMoveStation={(acronym, latitude, longitude) => setExtras(current => current.map(point => point.label === acronym ? { ...point, latitude, longitude } : point))}
               className="h-[62vh] min-h-[360px] w-full"
             />
             {loading && shown && (
-              <span className="label-caps absolute left-3 top-3 rounded-sm border border-line bg-surface px-2 py-1 text-ink-muted shadow">
+              <span className="label-caps absolute right-3 bottom-10 rounded-sm border border-line bg-surface px-2 py-1 text-ink-muted shadow">
                 Recalculando...
               </span>
             )}
           </div>
-          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
+          <ul className="coverage-legend flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
             <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: POINT_COLOR.covered }} />Alcançada em {target} min</li>
             <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: POINT_COLOR.late }} />Alcançada até {maxMinutes} min</li>
             <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: POINT_COLOR.outside }} />Além de {maxMinutes} min</li>
             <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: POINT_COLOR.unknown }} />Fora da malha</li>
-            <li>Faixas azuis: {minutes.join(", ")} min (mais escura = mais rápida)</li>
+            <li>Faixas azuis: {minutes.filter(value => value <= target).join(", ")} min (mais escura = mais rápida)</li>
+            <li><span className="coverage-hatch-swatch" />Hachura: setores com ocorrências além do alvo</li>
           </ul>
+          <details className="coverage-gap-details">
+            <summary>Demanda fora do alvo · {gaps.features.reduce((sum, feature) => sum + Number(feature.properties?.count ?? 0), 0).toLocaleString("pt-BR")} ocorrências em {gaps.features.length} setores</summary>
+            <p>Setores de aproximadamente 500 m agrupam ocorrências com tempo calculado acima do alvo. A hachura não representa um limite oficial. Ocorrências sem tempo na malha ficam separadas.</p>
+            <ol>{gaps.features.map((feature, index) => <li key={index}>Setor {index + 1} · {feature.geometry.coordinates[0][0][1].toFixed(4)}, {feature.geometry.coordinates[0][0][0].toFixed(4)} · {feature.properties?.count} ocorrências</li>)}</ol>
+          </details>
         </Panel>
 
         <div className="flex flex-col gap-4">
+          {extras.length > 0 && <Panel title="Antes × depois">
+            <div className="coverage-comparison">
+              <div><span>Quartéis atuais</span><strong>{percent(baseShare)}</strong><small>no alvo de {target} min</small></div>
+              <div><span>Com {extras.length} posto(s)</span><strong>{scenario.loading || !scenarioData ? "Calculando…" : percent(scenarioShare)}</strong><small>cenário hipotético</small></div>
+            </div>
+            <p className="text-sm text-ink-muted">Arraste o marcador âmbar e solte para recalcular. Pelo teclado, selecione o marcador, mova com as setas e confirme com Enter.</p>
+          </Panel>}
           <Panel title="Parâmetros">
             <Field label="Tempo-resposta alvo" hint="Deslocamento, sem contar saída do quartel. A NFPA 1710 usa 4 min para a primeira viatura.">
               <Select
@@ -199,15 +220,15 @@ export default function Cobertura() {
           </Panel>
 
           <Panel title="Por prioridade">
-            <ul className="flex flex-col gap-2">
+            <ul className="coverage-priority-list flex flex-col gap-2">
               {byPriority.map((row) => (
                 <li key={row.priority} className="flex flex-col gap-1">
                   <div className="flex justify-between text-sm">
                     <span className="text-ink">{PRIORITY_LABEL[row.priority]}</span>
                     <span className="font-semibold tabular-nums text-ink">{percent(row.share)}</span>
                   </div>
-                  <div className="h-2 w-full rounded-sm bg-mute-soft">
-                    <div className="h-2 rounded-sm bg-accent" style={{ width: `${(row.share ?? 0) * 100}%` }} />
+                  <div className="coverage-priority-track w-full">
+                    <div className={PRIORITY_TONE[row.priority]} style={{ width: `${(row.share ?? 0) * 100}%` }} />
                   </div>
                 </li>
               ))}
@@ -216,7 +237,7 @@ export default function Cobertura() {
 
           <Panel title="Quartéis">
             <ul className="flex flex-col divide-y divide-line text-sm">
-              {(shown?.stations ?? []).map((station) => (
+              {mapStations.map((station) => (
                 <li key={station.id} className="flex items-center justify-between gap-2 py-1.5">
                   <span className={cn("font-semibold", station.hypothetical ? "text-warn" : "text-ink")}>
                     {station.acronym}
@@ -226,7 +247,7 @@ export default function Cobertura() {
                     <button
                       type="button"
                       aria-label={`Remover ${station.acronym}`}
-                      onClick={() => setExtras((current) => current.filter((_, index) => `NOVO-${index + 1}` !== station.acronym))}
+                      onClick={() => setExtras((current) => current.filter(point => point.label !== station.acronym))}
                       className="text-ink-muted hover:text-alert"
                     >
                       <X className="h-4 w-4" />

@@ -11,6 +11,7 @@ import maplibregl from "maplibre-gl"
 
 import type { Closure, RouteSegment } from "@/api/types"
 import { SPEED_BAND_COLOR, speedBand } from "@/lib/route-language"
+import { CRITICAL_COLOR } from "../constants/constants"
 
 const SPEED_SOURCE = "speed-overlay"
 const SPEED_CASING = "speed-overlay-casing"
@@ -44,7 +45,8 @@ export function setSpeedOverlay(
       if (slice.length < 2) continue
       data.features.push({
         type: "Feature",
-        properties: { color: SPEED_BAND_COLOR[speedBand(segment)] },
+        properties: { color: SPEED_BAND_COLOR[speedBand(segment)], exceptional: segment.counterflow || segment.shoulder,
+          label: segment.counterflow ? 'Modo crítico · contramão autorizada' : segment.shoulder ? 'Modo crítico · acostamento' : `${Math.round(segment.speed_kmh)} km/h previstos · limite ${segment.limit_kmh} km/h` },
         geometry: { type: "LineString", coordinates: slice.map(([latitude, longitude]) => [longitude, latitude]) },
       })
     }
@@ -72,6 +74,17 @@ export function setSpeedOverlay(
     layout: { "line-cap": "round", "line-join": "round" },
     paint: { "line-color": ["get", "color"], "line-width": 6 },
   }, before)
+  map.addLayer({ id: 'speed-critical-chevron', type: 'symbol', source: SPEED_SOURCE,
+    filter: ['==', ['get', 'exceptional'], true],
+    layout: { 'symbol-placement': 'line', 'symbol-spacing': 44, 'text-field': '›', 'text-font': ['Noto Sans Regular'], 'text-size': 20, 'text-rotation-alignment': 'map', 'text-allow-overlap': true },
+    paint: { 'text-color': '#EDF0E8', 'text-halo-color': '#4D302A', 'text-halo-width': 1 } }, before)
+  const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false })
+  map.on('mouseenter', SPEED_LINE, (event) => {
+    const label = event.features?.[0]?.properties?.label
+    if (label) popup.setLngLat(event.lngLat).setText(String(label)).addTo(map)
+  })
+  map.on('mouseleave', SPEED_LINE, () => popup.remove())
+  map.once('remove', () => popup.remove())
 }
 
 /** A circle as a 48-sided polygon, in metres around its centre. */
@@ -112,20 +125,21 @@ export function setClosures(map: maplibregl.Map, closures: Closure[] | null | un
   }
 
   map.addSource(CLOSURE_SOURCE, { type: "geojson", data })
+  addHatchPattern(map, 'closure-hatch', [180, 94, 82])
   const before = firstVehicleLayer(map)
   map.addLayer({
     id: CLOSURE_FILL,
     type: "fill",
     source: CLOSURE_SOURCE,
     filter: ["==", ["geometry-type"], "Polygon"],
-    paint: { "fill-color": "#A32A20", "fill-opacity": 0.18 },
+    paint: { "fill-pattern": 'closure-hatch', "fill-opacity": 0.45 },
   }, before)
   map.addLayer({
     id: CLOSURE_LINE,
     type: "line",
     source: CLOSURE_SOURCE,
     filter: ["==", ["geometry-type"], "Polygon"],
-    paint: { "line-color": "#A32A20", "line-width": 2, "line-dasharray": [2, 1.5] },
+    paint: { "line-color": CRITICAL_COLOR, "line-width": 2, "line-dasharray": [2, 1.5] },
   }, before)
   map.addLayer({
     id: CLOSURE_CENTER,
@@ -134,9 +148,24 @@ export function setClosures(map: maplibregl.Map, closures: Closure[] | null | un
     filter: ["==", ["geometry-type"], "Point"],
     paint: {
       "circle-radius": 5,
-      "circle-color": "#A32A20",
+      "circle-color": CRITICAL_COLOR,
       "circle-stroke-color": "#FFFFFF",
       "circle-stroke-width": 2,
     },
   }, before)
+  map.addLayer({ id: 'closures-sign', type: 'symbol', source: CLOSURE_SOURCE,
+    filter: ['==', ['geometry-type'], 'Point'],
+    layout: { 'text-field': '×', 'text-font': ['Noto Sans Regular'], 'text-size': 23, 'text-allow-overlap': true },
+    paint: { 'text-color': '#F3E8E0', 'text-halo-color': '#743B32', 'text-halo-width': 2 } }, before)
+}
+
+export function addHatchPattern(map: maplibregl.Map, id: string, color: [number, number, number]) {
+  if (map.hasImage(id)) return
+  const size = 12
+  const data = new Uint8Array(size * size * 4)
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const offset = (y * size + x) * 4
+    data.set([...color, (x + y) % size < 2 ? 190 : 0], offset)
+  }
+  map.addImage(id, { width: size, height: size, data })
 }
