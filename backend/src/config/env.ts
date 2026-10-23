@@ -20,7 +20,13 @@ const envSchema = z.object({
   WEATHER_URL: z.string().default("https://api.open-meteo.com"),
   // OSRM publico, so como referencia externa para comparar com a rota da IA.
   ROUTER_URL: z.string().default("https://router.project-osrm.org"),
-  GEO_USER_AGENT: z.string().default("ZENO-dispatch-console/1.0")
+  GEO_USER_AGENT: z.string().default("ZENO-dispatch-console/1.0"),
+
+  VEHICLE_SIGNAL_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(3600).default(120),
+  VEHICLE_STOP_DISTANCE_METERS: z.coerce.number().positive().max(1000).default(30),
+  VEHICLE_STOP_WINDOW_MINUTES: z.coerce.number().min(1).max(60).default(3),
+  VEHICLE_DESTINATION_RADIUS_METERS: z.coerce.number().positive().max(2000).default(150),
+  ROUTE_WET_ROAD_PRECIPITATION_MM: z.coerce.number().nonnegative().default(0.5)
 })
 
 export const env = envSchema.parse(process.env)

@@ -276,12 +276,15 @@ model Vehicle {
   /// Ultima posicao conhecida; alimenta o rastreamento em tempo real.
   current_latitude  Decimal? @db.Decimal(15, 12)
   current_longitude Decimal? @db.Decimal(15, 12)
+  last_position_at  DateTime?
+  appearance        Json?
 
   unit_id String
   unit    Unit   @relation(fields: [unit_id], references: [id], onDelete: Restrict)
 
   crews      Crew[]
   dispatches Dispatch[]
+  positions  VehiclePosition[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -289,6 +292,24 @@ model Vehicle {
   @@index([unit_id])
   @@index([status])
   @@map("vehicle")
+}
+
+/// Pontos recebidos do terminal, com retenção operacional limitada.
+model VehiclePosition {
+  id          String   @id @default(uuid())
+  vehicle_id  String
+  vehicle     Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+  latitude    Decimal  @db.Decimal(15, 12)
+  longitude   Decimal  @db.Decimal(15, 12)
+  heading     Float?
+  dispatch_id String?
+  dispatch    Dispatch? @relation(fields: [dispatch_id], references: [id], onDelete: SetNull)
+  recorded_at DateTime @default(now())
+
+  @@index([vehicle_id, recorded_at])
+  @@index([recorded_at])
+  @@index([dispatch_id])
+  @@map("vehicle_position")
 }
 
 /// Guarnicao: a equipe embarcada em uma viatura durante um turno.
@@ -425,7 +446,8 @@ model Dispatch {
   used_route_id String? @unique
   used_route    Route?  @relation("UsedRoute", fields: [used_route_id], references: [id], onDelete: SetNull)
 
-  events OccurrenceEvent[]
+  events    OccurrenceEvent[]
+  positions VehiclePosition[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

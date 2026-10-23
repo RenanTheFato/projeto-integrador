@@ -1,5 +1,6 @@
 import { env } from "../../config/env.js";
 import { BadRequestError, ConflictError, NotFoundError, ServiceUnavailableError } from "../../errors/index.js";
+import { MAX_OVERLAY_RESPONSE_BYTES } from "./routing-overlay-cache.js";
 
 /// One manoeuvre of the turn-by-turn list. Structured rather than worded, so
 /// the interface decides how to say "turn left" in its own language.
@@ -27,6 +28,14 @@ export type RouteSegment = {
   street: string | null,
   counterflow: boolean,
   shoulder: boolean
+  incline?: string
+}
+
+export interface RouteFeature {
+  type: "traffic_signals" | "stop" | "crossing" | "speed_bump" | "bridge" | "max_weight" | "max_height" | "narrow"
+  geometry_index: number
+  location: [number, number]
+  value?: string
 }
 
 export interface RouteVariant {
@@ -36,6 +45,8 @@ export interface RouteVariant {
   geometry: [number, number][],
   steps: RouteStep[],
   segments: RouteSegment[],
+  route_features?: RouteFeature[],
+  exploration?: [number, number][],
   /// Metres driven on each class of road.
   composition: Record<"highway" | "primary" | "secondary" | "tertiary" | "local", number>,
   /// Neural variant only: share of its distance on the same streets as the shortest.
@@ -86,6 +97,23 @@ export interface IsochroneResponse {
   }
 }
 
+export interface EdgeCostsResponse {
+  type: "FeatureCollection"
+  model_version: string | null
+  features: {
+    type: "Feature", id: string,
+    geometry: { type: "LineString", coordinates: [number, number][] },
+    properties: { cost_seconds: number, speed_kmh: number, limit_kmh: number, highway: string, street: string | null }
+  }[]
+}
+
+export interface UnitAreasResponse {
+  model_version: string | null
+  critical_mode: boolean
+  skipped_origins: number[]
+  areas: { origin_index: number, area: Isochrone["geometry"], reached_nodes: number }[]
+}
+
 export interface TravelTime {
   reachable: boolean,
   time_seconds: number | null,
@@ -112,6 +140,7 @@ export type TrainingPoint = {
   train_loss: number | null,
   validation_loss: number | null,
   best_validation_loss: number | null
+  learning_rate?: number | null
 }
 
 export interface TrainingJob {
@@ -159,7 +188,7 @@ export interface ModelInfo {
 /// the coordinates we sent were rejected, not that the service is down.
 export class AiClient {
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, maxBytes?: number): Promise<T> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), env.AI_SERVICE_TIMEOUT_MS)
 
@@ -181,7 +210,7 @@ export class AiClient {
       clearTimeout(timeout)
     }
 
-    const text = await response.text()
+    const text = maxBytes ? await this.readLimitedResponse(response, maxBytes) : await response.text()
     const payload = text ? JSON.parse(text) : null
 
     // FastAPI answers a validation failure with an array of field errors, so
@@ -214,10 +243,37 @@ export class AiClient {
     return payload as T
   }
 
+  // Interrompe a leitura antes de carregar uma camada inteira fora do limite.
+  private async readLimitedResponse(response: Response, maxBytes: number): Promise<string> {
+    const reader = response.body?.getReader()
+    if (!reader) {
+      const text = await response.text()
+      if (Buffer.byteLength(text) > maxBytes) throw new ServiceUnavailableError("A camada de mapa excedeu o limite de resposta")
+      return text
+    }
+    const chunks: Uint8Array[] = []
+    let bytes = 0
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        bytes += value.byteLength
+        if (bytes > maxBytes) {
+          await reader.cancel()
+          throw new ServiceUnavailableError("A camada de mapa excedeu o limite de resposta")
+        }
+        chunks.push(value)
+      }
+      return Buffer.concat(chunks).toString("utf8")
+    } finally {
+      reader.releaseLock()
+    }
+  }
+
   async calculateRoute(
     origin: { latitude: number, longitude: number },
     destination: { latitude: number, longitude: number },
-    options: { critical_mode?: boolean, closures?: Closure[] } = {},
+    options: { critical_mode?: boolean, closures?: Closure[], trace?: boolean } = {},
   ): Promise<RouteResponse> {
     return this.request<RouteResponse>("POST", "/routes", {
       origin_latitude: origin.latitude,
@@ -226,7 +282,16 @@ export class AiClient {
       destination_longitude: destination.longitude,
       ...(options.critical_mode ? { critical_mode: true } : {}),
       ...(options.closures?.length ? { closures: options.closures } : {}),
+      ...(options.trace ? { trace: true } : {}),
     })
+  }
+
+  async edgeCosts(bbox?: string): Promise<EdgeCostsResponse> {
+    return this.request<EdgeCostsResponse>("GET", `/edge-costs${bbox ? `?bbox=${encodeURIComponent(bbox)}` : ""}`, undefined, MAX_OVERLAY_RESPONSE_BYTES)
+  }
+
+  async unitAreas(origins: GeoPoint[], critical_mode = false): Promise<UnitAreasResponse> {
+    return this.request<UnitAreasResponse>("POST", "/unit-areas", { origins, critical_mode }, MAX_OVERLAY_RESPONSE_BYTES)
   }
 
   async isochrones(

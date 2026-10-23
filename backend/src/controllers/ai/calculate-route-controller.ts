@@ -14,6 +14,7 @@ export class CalculateRouteController {
       destination_latitude: z.coerce.number({ error: "The destination_latitude is required" }).min(-90).max(90),
       destination_longitude: z.coerce.number({ error: "The destination_longitude is required" }).min(-180).max(180),
       critical_mode: z.boolean().optional().default(false),
+      trace: z.boolean().optional(),
       closures: z.array(z.object({
         latitude: z.coerce.number().min(-90).max(90),
         longitude: z.coerce.number().min(-180).max(180),

@@ -3,6 +3,7 @@ import { prisma } from "../../config/prisma.js";
 import { NotFoundError } from "../../errors/index.js";
 import { AiClient, Closure } from "./ai-client.js";
 import { recordOccurrenceEvents } from "../occurrence/occurrence-events.js";
+import { getRouteWeather } from "../geo/route-weather-service.js";
 
 interface CalculateRouteRequest {
   origin_latitude?: number,
@@ -17,6 +18,7 @@ interface CalculateRouteRequest {
   critical_mode?: boolean,
   /// Streets reported blocked; avoided for this calculation only.
   closures?: Closure[]
+  trace?: boolean
 }
 
 export class CalculateRouteService {
@@ -26,7 +28,9 @@ export class CalculateRouteService {
     critical: unknown,
     shortest: unknown,
     critical_mode: boolean,
-    closures: { count: number, blocked_edges: number }
+    closures: { count: number, blocked_edges: number },
+    model_version?: string | null,
+    weather?: Awaited<ReturnType<typeof getRouteWeather>>
   }> {
 
     const origin = await this.resolveOrigin(data)
@@ -52,10 +56,14 @@ export class CalculateRouteService {
 
     }
 
-    const result = await new AiClient().calculateRoute(origin, destination, {
-      critical_mode: data.critical_mode ?? false,
-      closures: data.closures
-    })
+    const [result, weather] = await Promise.all([
+      new AiClient().calculateRoute(origin, destination, {
+        critical_mode: data.critical_mode ?? false,
+        closures: data.closures,
+        ...(data.trace ? { trace: true } : {}),
+      }),
+      getRouteWeather(destination.latitude, destination.longitude),
+    ])
 
     // Without a dispatch this is an exploratory query (the "what would the
     // route be" case), so nothing is persisted.
@@ -67,6 +75,8 @@ export class CalculateRouteService {
         shortest: result.shortest,
         critical_mode: result.critical_mode,
         closures: result.closures,
+        model_version: result.model_version,
+        ...(weather ? { weather } : {}),
       }
     }
 
@@ -129,6 +139,8 @@ export class CalculateRouteService {
       shortest: result.shortest,
       critical_mode: result.critical_mode,
       closures: result.closures,
+      model_version: result.model_version,
+      ...(weather ? { weather } : {}),
     }
   }
 

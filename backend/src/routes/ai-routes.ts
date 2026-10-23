@@ -1,10 +1,13 @@
 import { FastifyPluginOptions, FastifyReply, FastifyRequest } from "fastify";
 import { FastifyTypedInstance } from "../@types/fastify-types.js";
 import { CalculateRouteController } from "../controllers/ai/calculate-route-controller.js";
+import { EdgeCostsController } from "../controllers/ai/edge-costs-controller.js";
 import { CoverageController, EtaAccuracyController } from "../controllers/ai/coverage-controller.js";
 import { GetTrainingController, ListTrainingsController, ModelInfoController, StartTrainingController } from "../controllers/ai/training-controller.js";
 
 export async function aiRoutes(fastify: FastifyTypedInstance, plugins: FastifyPluginOptions) {
+
+  fastify.get("/edge-costs", (req, rep) => new EdgeCostsController().handle(req, rep))
 
   fastify.post("/routes", async (req: FastifyRequest, rep: FastifyReply) => {
     return new CalculateRouteController().handle(req, rep)
