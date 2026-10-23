@@ -326,6 +326,10 @@ sistema de verdade tem três processos, que sobem **nesta ordem**:
 O PostgreSQL precisa estar rodando. No Windows o cluster fica em `C:\pgsql-data`
 (fora do OneDrive, para não arriscar corrupção por sincronização).
 
+Copie `backend/.env.example` para `backend/.env` e ajuste `DATABASE_URL` com
+o usuário, a senha e o nome de um banco PostgreSQL existente. O arquivo de
+exemplo contém apenas valores de desenvolvimento, sem credenciais reais.
+
 ```bash
 cd backend/
 npx prisma migrate deploy   # aplica as migrations
@@ -677,6 +681,52 @@ git push origin feature/nome-da-tarefa
 ---
 
 ## Dependências Principais
+
+### Atualizar as informações viárias do OSM
+
+As camadas de custo (`GET /ai/edge-costs`), áreas por menor tempo de resposta
+(`GET /units/areas`) e alertas de via usam o grafo real carregado pelo serviço
+Python. Semáforos, paradas, travessias e lombadas agora são preservados como nós;
+pontes, limites de peso/altura/largura e inclinação são atributos extras das vias.
+Uma tag ausente continua ausente, sem preenchimento estimado.
+
+Depois de atualizar `pathfinder.py`, pare o serviço Python e regenere o cache a
+partir de `machine/`. O comando abaixo guarda o cache anterior, sem apagá-lo:
+
+```powershell
+Rename-Item -LiteralPath .\cache -NewName cache-before-road-features
+poetry run python -c "from api.engine import engine; engine.load(); print(engine.graph_size, engine.model_version)"
+poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+O primeiro carregamento requer conexão ao OpenStreetMap e pode demorar. Caso o
+backup já exista, escolha outro nome antes de executar `Rename-Item`. O OSMnx
+baixa respostas novas para `machine/cache/`; nos próximos inícios reutiliza esse
+cache. O grafo é reconstruído e seus custos são recalculados com o checkpoint
+existente. `PathNetwork.extract_edge_features`, número/ordem das entradas da rede
+e normalização não mudaram: não é necessário retreinar o modelo por essas tags.
+O número de nós pode aumentar porque sinais intermediários são preservados.
+
+Os caches das camadas Python são limpos no carregamento/reload. No Node, as
+chaves incluem `model_version`, bbox ou posição/lista dos quartéis; reinicie o
+Node após regenerar apenas o mapa sem trocar a versão do checkpoint (ou aguarde
+os cinco minutos de validade). Respostas grandes exigem bbox menor em vez de
+omitir ruas silenciosamente. Os polígonos de unidades são calculados por tempo
+de resposta; não representam jurisdição oficial e podem se sobrepor nas bordas
+do buffer de vias, assim como as isócronas.
+
+Para conferir o caminho e o custo contra NetworkX também no mapa de Taubaté:
+
+```powershell
+$env:RUN_REAL_GRAPH_TESTS = "1"
+poetry run pytest tests/test_visual_routing.py -q
+Remove-Item Env:RUN_REAL_GRAPH_TESTS
+```
+
+O rastro `trace: true` registra os nós fechados nas duas frentes do Dijkstra
+bidirecional e amostra no máximo 4.000 pontos por variante, sem persistir o
+rastro no banco. Coordenadas de rastro/rota são `[latitude, longitude]`; GeoJSON
+das camadas segue `[longitude, latitude]`.
 
 ### IA (`machine/`)
 
