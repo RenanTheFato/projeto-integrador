@@ -40,6 +40,32 @@ def test_steps_segments_and_geometry_describe_the_same_walk(city_engine):
     assert avenue and all(segment["speed_kmh"] == pytest.approx(60, abs=0.5) for segment in avenue)
 
 
+@pytest.mark.parametrize("destination", [(1, 6), (5, 6), (0, 6)])
+def test_shared_streets_have_the_same_time_in_normal_and_neural_routes(city_engine, destination):
+    result = city_engine.calculate(node_point(1, 0), node_point(*destination))
+
+    def edge_times(route):
+        return {
+            tuple(tuple(point) for point in route["geometry"][segment["start"]:segment["end"] + 1]): segment["time_seconds"]
+            for segment in route["segments"]
+        }
+
+    normal = edge_times(result["shortest"])
+    neural = edge_times(result["neural"])
+    shared = normal.keys() & neural.keys()
+    if destination != (1, 6):
+        assert shared
+    for edge in shared:
+        assert normal[edge] == neural[edge]
+
+
+def test_identical_routes_arrive_at_the_same_time(city_engine):
+    result = city_engine.calculate(node_point(0, 0), node_point(0, 6))
+    assert result["neural"]["geometry"] == result["shortest"]["geometry"]
+    assert result["neural"]["estimated_time_seconds"] == result["shortest"]["estimated_time_seconds"]
+    assert result["neural"]["segments"] == result["shortest"]["segments"]
+
+
 def test_a_closure_moves_the_route_off_the_blocked_street(city_engine):
     blocked = node_point(0, 3)
     closures = [{"latitude": blocked[0], "longitude": blocked[1], "radius_m": 30}]

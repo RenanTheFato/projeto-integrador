@@ -22,6 +22,9 @@ sys.path.insert(0, MACHINE_ROOT)
 from api import coverage, maneuvers
 from api.closures import ClosureIndex, without
 from api.geometry import LocalProjection
+from api.edge_costs import edge_costs
+from api.road_features import route_features
+from api.search import exploration_points, traced_shortest_path
 from src.neural.path_network import PathNetwork
 from src.pathfinding.pathfinder import (
     apply_neural_weights,
@@ -37,6 +40,7 @@ MODEL_PATH = os.path.join(MACHINE_ROOT, "models", "path_network.pth")
 # corner and produce a confident, meaningless route, so anything farther than
 # this from the network is rejected as outside the covered area.
 MAX_SNAP_DISTANCE_M = 2000
+VISUAL_CACHE_ENTRIES = 8
 
 CRITICAL_COST_FACTOR: dict[str, float] = {
     "motorway": 0.94, "motorway_link": 0.96,
@@ -92,6 +96,8 @@ class RouteEngine:
         # Isochrones of the fixed stations are asked for on every visit to the
         # coverage screen; they only change when the model does.
         self._isochrone_cache: OrderedDict = OrderedDict()
+        self._edge_cost_cache: OrderedDict = OrderedDict()
+        self._unit_area_cache: OrderedDict = OrderedDict()
 
     @property
     def loaded(self) -> bool:
@@ -342,6 +348,8 @@ class RouteEngine:
                 "critical_cost": ClosureIndex(critical, projection),
             }
             self._isochrone_cache.clear()
+            self._edge_cost_cache.clear()
+            self._unit_area_cache.clear()
             self._model_version = model_version
             self._loaded = True
 
@@ -350,7 +358,7 @@ class RouteEngine:
         self._loaded = False
         self.load()
 
-    def _variant(self, graph, origin_node, dest_node, weight: str) -> tuple[dict, list[dict]]:
+    def _variant(self, graph, origin_node, dest_node, weight: str, trace: bool = False) -> tuple[dict, list[dict]]:
         """
         One route, with its numbers, the line that draws it and what it means.
 
@@ -359,7 +367,10 @@ class RouteEngine:
         the edge the router picked for each pair of intersections, and the
         drawn line measures the same as the distance it reports.
         """
-        path = nx.shortest_path(graph, origin_node, dest_node, weight=weight)
+        if trace:
+            path, explored = traced_shortest_path(graph, origin_node, dest_node, weight)
+        else:
+            path = nx.shortest_path(graph, origin_node, dest_node, weight=weight)
         time_weight = "critical_cost" if weight == "critical_cost" else "neural_cost"
         records = maneuvers.walk(graph, path, weight, time_weight)
 
@@ -372,6 +383,8 @@ class RouteEngine:
             "geometry": path_geometry(graph, path, weight),
             "steps": maneuvers.steps(records),
             "segments": maneuvers.segments(records),
+            "route_features": route_features(graph, records),
+            **({"exploration": exploration_points(graph, explored)} if trace else {}),
             "composition": maneuvers.composition(records),
         }
 
@@ -439,6 +452,7 @@ class RouteEngine:
         destination: tuple[float, float],
         critical_mode: bool = False,
         closures: list[dict] | None = None,
+        trace: bool = False,
     ) -> dict:
         """
         Return both routes: the neural one (weighted by predicted travel time)
@@ -462,14 +476,14 @@ class RouteEngine:
                     raise ValueError("The closures leave no route between these two points")
                 raise ValueError("No route exists between these two points")
 
-            normal, normal_records = self._variant(graph, origin_node, dest_node, "neural_cost")
-            shortest, shortest_records = self._variant(graph, origin_node, dest_node, "length")
+            normal, normal_records = self._variant(graph, origin_node, dest_node, "neural_cost", trace)
+            shortest, shortest_records = self._variant(graph, origin_node, dest_node, "length", trace)
             normal["shared_with_shortest"] = self._shared_ratio(normal_records, shortest_records)
 
             critical = None
             if critical_mode:
                 critical_graph, _ = self._restricted(self._critical_graph, "critical_cost", closures)
-                critical, _ = self._variant(critical_graph, origin_node, dest_node, "critical_cost")
+                critical, _ = self._variant(critical_graph, origin_node, dest_node, "critical_cost", trace)
 
             return {
                 "neural": normal,
@@ -479,6 +493,37 @@ class RouteEngine:
                 "closures": {"count": len(closures or []), "blocked_edges": blocked},
                 "model_version": self._model_version,
             }
+
+    def edge_costs(self, bbox=None) -> dict:
+        with self._lock:
+            if not self._loaded:
+                raise RuntimeError("The route engine is still loading")
+            key = tuple(bbox) if bbox else None
+            if key not in self._edge_cost_cache:
+                self._edge_cost_cache[key] = edge_costs(self._graph, self._projection, self._model_version, bbox)
+                if len(self._edge_cost_cache) > VISUAL_CACHE_ENTRIES:
+                    self._edge_cost_cache.popitem(last=False)
+            self._edge_cost_cache.move_to_end(key)
+            return self._edge_cost_cache[key]
+
+    def unit_areas(self, origins: list[tuple[float, float]], critical_mode: bool = False) -> dict:
+        with self._lock:
+            if not self._loaded:
+                raise RuntimeError("The route engine is still loading")
+            key = (tuple(origins), critical_mode)
+            if key not in self._unit_area_cache:
+                graph, weight = self._weighted(critical_mode)
+                snapped = self._snap_many(origins)
+                sources = [node for node, _ in snapped]
+                self._unit_area_cache[key] = {
+                    "model_version": self._model_version, "critical_mode": critical_mode,
+                    "skipped_origins": [index for index, node in enumerate(sources) if node is None],
+                    "areas": coverage.station_areas(graph, sources, weight, self._projection),
+                }
+                if len(self._unit_area_cache) > VISUAL_CACHE_ENTRIES:
+                    self._unit_area_cache.popitem(last=False)
+            self._unit_area_cache.move_to_end(key)
+            return self._unit_area_cache[key]
 
     def isochrones(
         self,

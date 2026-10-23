@@ -15,6 +15,8 @@ covered, which is exactly the kind of confident lie a coverage map must avoid.
 
 import networkx as nx
 import shapely
+from heapq import heappop, heappush
+from itertools import count
 from shapely.geometry import LineString, MultiPolygon, Polygon, mapping
 from shapely.ops import substring, transform
 
@@ -25,6 +27,7 @@ from src.pathfinding.pathfinder import edge_shape
 # hose lay plus the depth of a lot, so a house set back from the road is in.
 STREET_BUFFER_M = 90.0
 SIMPLIFY_M = 12.0
+MAX_AREA_COORDINATES = 100000
 
 # The last metres from the snapped intersection to the actual point are not
 # routed; they are priced at a slow urban speed so a far-off point is not
@@ -35,6 +38,66 @@ LAST_MILE_SPEED_MS = 25 / 3.6
 def reach(graph, sources: list, weight: str, cutoff: float) -> dict:
     """Seconds from the nearest source to every node reachable within cutoff."""
     return nx.multi_source_dijkstra_path_length(graph, set(sources), cutoff=cutoff, weight=weight)
+
+
+def station_ownership(graph, sources: list, weight: str) -> dict:
+    # Uma única busca para todos os quartéis; guardamos só o dono de cada nó,
+    # sem armazenar milhares de caminhos completos em memória.
+    serial, queue, distances, owners = count(), [], {}, {}
+    for index, node in enumerate(sources):
+        if node is not None and node not in distances:
+            distances[node] = 0.0
+            heappush(queue, (0.0, next(serial), node, index))
+    while queue:
+        distance, _, node, owner = heappop(queue)
+        if node in owners:
+            continue
+        owners[node] = owner
+        for neighbor, edges in graph[node].items():
+            cost = min(float(edge.get(weight, 1)) for edge in edges.values())
+            candidate = distance + cost
+            if neighbor not in owners and candidate < distances.get(neighbor, float("inf")):
+                distances[neighbor] = candidate
+                heappush(queue, (candidate, next(serial), neighbor, owner))
+    return owners
+
+
+def _buffered_area(lines):
+    if not lines:
+        return Polygon()
+    simplified = shapely.simplify(lines, SIMPLIFY_M)
+    area = shapely.union_all(shapely.buffer(simplified, STREET_BUFFER_M, quad_segs=2)).simplify(SIMPLIFY_M)
+    return MultiPolygon([area]) if isinstance(area, Polygon) and not area.is_empty else area
+
+
+def station_areas(graph, sources: list, weight: str, projection: LocalProjection) -> list[dict]:
+    owners = station_ownership(graph, sources, weight)
+    lines = [[] for _ in sources]
+    counts = [0 for _ in sources]
+    for node, owner in owners.items():
+        counts[owner] += 1
+        for neighbor, edges in graph[node].items():
+            edge = min(edges.values(), key=lambda data: data.get(weight, float("inf")))
+            line = LineString([projection.to_xy(lon, lat) for lat, lon in edge_shape(graph, node, neighbor, edge)])
+            if line.length <= 0:
+                continue
+            other = owners.get(neighbor)
+            if other is not None and other != owner:
+                # A fronteira no trecho une as áreas dos dois nós sem pintar
+                # um quarteirão inteiro só por estar dentro de um convex hull.
+                lines[owner].append(substring(line, 0, .5, normalized=True))
+                lines[other].append(substring(line, .5, 1, normalized=True))
+            else:
+                lines[owner].append(line)
+    output, coordinates = [], 0
+    for index, station_lines in enumerate(lines):
+        area = _buffered_area(station_lines)
+        coordinates += int(shapely.get_num_coordinates(area))
+        if coordinates > MAX_AREA_COORDINATES:
+            raise ValueError("As áreas excedem o limite de geometria da cidade")
+        geographic = transform(lambda x, y, z=None: projection.to_lonlat(x, y), area) if not area.is_empty else area
+        output.append({"origin_index": index, "area": mapping(geographic) if not area.is_empty else None, "reached_nodes": counts[index]})
+    return output
 
 
 def _reached_lines(graph, times: dict, weight: str, limit: float, projection: LocalProjection):
@@ -88,17 +151,7 @@ def isochrones(
     result = []
     for threshold in thresholds:
         lines = _reached_lines(graph, times, weight, threshold * 60.0, projection)
-        if lines:
-            # Buffering each line on its own and merging the results is about
-            # thirty times faster than buffering one MultiLineString, which
-            # makes GEOS union the pieces pairwise as it goes.
-            simplified = shapely.simplify(lines, SIMPLIFY_M)
-            area = shapely.union_all(shapely.buffer(simplified, STREET_BUFFER_M, quad_segs=2)).simplify(SIMPLIFY_M)
-        else:
-            area = Polygon()
-
-        if isinstance(area, Polygon) and not area.is_empty:
-            area = MultiPolygon([area])
+        area = _buffered_area(lines)
 
         geographic = transform(lambda x, y, z=None: projection.to_lonlat(x, y), area) if not area.is_empty else area
 

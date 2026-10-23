@@ -8,11 +8,13 @@ answers two questions: "what is the best route between these points" and
 
 import os
 import sys
+import math
 from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+from starlette.middleware.gzip import GZipMiddleware
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -21,6 +23,8 @@ from api.places import HospitalDirectory
 from api.training import manager
 
 hospitals = HospitalDirectory(CITY)
+GZIP_MINIMUM_BYTES = 1000
+MAX_AREA_ORIGINS = 50
 
 
 class Point(BaseModel):
@@ -38,6 +42,7 @@ class RouteRequest(BaseModel):
     destination_latitude: float = Field(ge=-90, le=90)
     destination_longitude: float = Field(ge=-180, le=180)
     critical_mode: bool = False
+    trace: bool = False
     closures: list[Closure] = Field(default_factory=list, max_length=50)
 
 
@@ -61,6 +66,11 @@ class TrainingRequest(BaseModel):
     epochs: int = Field(default=800, ge=10, le=5000)
 
 
+class UnitAreaRequest(BaseModel):
+    origins: list[Point] = Field(min_length=1, max_length=MAX_AREA_ORIGINS)
+    critical_mode: bool = False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Loading here rather than lazily means the first dispatch of the day is
@@ -82,6 +92,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+app.add_middleware(GZipMiddleware, minimum_size=GZIP_MINIMUM_BYTES)
 
 
 @app.get("/health")
@@ -127,7 +138,31 @@ def calculate_route(request: RouteRequest) -> dict:
         (request.origin_latitude, request.origin_longitude),
         (request.destination_latitude, request.destination_longitude),
         critical_mode=request.critical_mode,
+        trace=request.trace,
         closures=[closure.model_dump() for closure in request.closures],
+    ))
+
+
+@app.get("/edge-costs")
+def get_edge_costs(bbox: str | None = None) -> dict:
+    bounds = None
+    if bbox is not None:
+        try:
+            bounds = tuple(float(value) for value in bbox.split(","))
+            if len(bounds) != 4 or not all(math.isfinite(value) for value in bounds):
+                raise ValueError()
+            west, south, east, north = bounds
+            if not (-180 <= west < east <= 180 and -90 <= south < north <= 90):
+                raise ValueError()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="bbox must be minLon,minLat,maxLon,maxLat")
+    return _run(lambda: engine.edge_costs(bounds))
+
+
+@app.post("/unit-areas")
+def calculate_unit_areas(request: UnitAreaRequest) -> dict:
+    return _run(lambda: engine.unit_areas(
+        [(origin.latitude, origin.longitude) for origin in request.origins], request.critical_mode,
     ))
 
 

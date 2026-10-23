@@ -89,3 +89,31 @@ def test_engine_not_loaded_is_unavailable(monkeypatch):
     monkeypatch.setattr(service.engine, "_loaded", False)
     response = client.post("/routes", json=route_body())
     assert response.status_code == 503
+
+
+def test_edge_costs_validates_bbox_and_compresses_the_real_geojson():
+    response = client.get("/edge-costs", headers={"Accept-Encoding": "gzip"})
+    assert response.status_code == 200
+    assert response.headers["content-encoding"] == "gzip"
+    assert len(response.json()["features"]) == service.engine.graph_size[1]
+    for invalid in ("1,2,3", "nan,0,1,2", "0,0,181,1", "1,1,0,0"):
+        assert client.get("/edge-costs", params={"bbox": invalid}).status_code == 422
+
+
+def test_trace_only_appears_when_requested():
+    assert "exploration" not in client.post("/routes", json=route_body()).json()["neural"]
+    response = client.post("/routes", json=route_body(trace=True))
+    assert response.status_code == 200
+    assert response.json()["neural"]["exploration"]
+
+
+def test_unit_areas_validates_and_keeps_origin_order():
+    origins = [node_point(0, 0), node_point(6, 6)]
+    response = client.post("/unit-areas", json={
+        "origins": [{"latitude": lat, "longitude": lon} for lat, lon in origins],
+        "critical_mode": True,
+    })
+    assert response.status_code == 200
+    assert response.json()["critical_mode"] is True
+    assert [area["origin_index"] for area in response.json()["areas"]] == [0, 1]
+    assert client.post("/unit-areas", json={"origins": []}).status_code == 422

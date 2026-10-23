@@ -153,6 +153,7 @@ def segments(records: list[dict]) -> list[dict]:
             "street": record["name"],
             "counterflow": bool(edge.get("critical_reverse")),
             "shoulder": bool(edge.get("critical_uses_shoulder")),
+            **({"incline": _text(edge["incline"])} if _text(edge.get("incline")) else {}),
         })
     return output
 
